@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="manifest" href="manifest.json">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flatpak Capture & Record Bypass</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 8px;
+            display: flex;
+            gap: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        button {
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #startButton { background-color: #28a745; }
+        #startButton:hover { background-color: #218838; }
+        #stopButton { background-color: #dc3545; display: none; }
+        #stopButton:hover { background-color: #c82333; }
+        video {
+            width: 100vw;
+            height: 100vh;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <button id="startButton">1. Select & Start Recording</button>
+        <button id="stopButton">2. Stop & Save Video</button>
+    </div>
+
+    <video id="videoDisplay" autoplay playsinline muted></video>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const videoDisplay = document.getElementById('videoDisplay');
+
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        startButton.addEventListener('click', async () => {
+            try {
+                const mediaStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { displaySurface: "window" },
+                    audio: true 
+                });
+
+                videoDisplay.srcObject = mediaStream;
+                recordedChunks = [];
+
+                mediaRecorder = new MediaRecorder(mediaStream, {
+                    mimeType: 'video/webm; codecs=vp9'
+                });
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' })
+                    const url = URL.createObjectURL(blob);
+                    
+                    
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url
+                    a.download = `flatpak-capture-${Date.now()}.webm`
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    // Cleanup
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                    startButton.style.display = 'inline-block';
+                    stopButton.style.display = 'none';
+                };
+
+                mediaStream.getVideoTracks()[0].onended = () => {
+                    if (mediaRecorder.state !== 'inactive') {
+                        mediaRecorder.stop();
+                    }
+                };
+                mediaRecorder.start();
+                startButton.style.display = 'none';
+                stopButton.style.display = 'inline-block';
+
+            } catch (error) {
+                console.error("Recording error:", error);
+                alert("Failed to start recording. Make sure window sharing permissions are allowed.");
+            }
+        });
+
+        stopButton.addEventListener('click', () => {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                videoDisplay.srcObject.getTracks().forEach(track => track.stop());
+            }
+        });
+
+    </script>
+</body>
+</html>
