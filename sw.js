@@ -1,9 +1,8 @@
 const CACHE_NAME = 'pwa-cache-v1';
+// Use relative paths to stay inside your GitHub Pages subfolder
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/app.js'
+  'screenrecorder.html',
+  'manifest.json'
 ];
 
 self.addEventListener('install', (e) => {
