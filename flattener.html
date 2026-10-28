@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clean Scanner to PDF</title>
+    <!-- jsPDF for client-side offline PDF creation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b111e;
+            --card-bg: rgba(22, 32, 54, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --text-main: #f1f5f9;
+            --text-dim: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 17, 30, 0.85);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .back-link {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #fff; }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+            flex: 1;
+            max-width: 1500px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        @media (max-width: 900px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .editor-zone {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            min-height: 500px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            max-width: 100%;
+            max-height: 70vh;
+            display: inline-block;
+        }
+
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 70vh;
+            border-radius: 4px;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+        }
+
+        .btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.65rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-green { background-color: var(--accent-green); }
+        .btn-red { background-color: var(--accent-red); }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        select {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.6rem;
+            border-radius: 6px;
+            outline: none;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .deskew-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .deskew-label,
+        .deskew-range-labels {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+
+        .deskew-label output {
+            color: var(--text-main);
+            font-variant-numeric: tabular-nums;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-blue);
+            cursor: pointer;
+        }
+
+        .deskew-help {
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .deskew-preview {
+            min-height: 120px;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+
+        .deskew-preview img {
+            display: none;
+            max-width: 100%;
+            max-height: 180px;
+            object-fit: contain;
+            background: white;
+        }
+
+        .deskew-preview-status {
+            color: var(--text-dim);
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .page-list {
+            display: flex;
+            gap: 0.75rem;
+            overflow-x: auto;
+            padding-bottom: 0.5rem;
+            min-height: 90px;
+        }
+
+        .page-thumb {
+            position: relative;
+            flex: 0 0 70px;
+            height: 90px;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 2px solid var(--border-color);
+        }
+        .page-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .page-thumb .del-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .placeholder-text {
+            color: var(--text-dim);
+            font-size: 0.95rem;
+            text-align: center;
+            pointer-events: none;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="back-link">← Back to Hub</a>
+        <h1>Clean Document Scanner</h1>
+        <div style="width: 80px;"></div>
+    </header>
+
+    <div class="container">
+        <!-- Interactive Workspace -->
+        <div class="editor-zone" id="dropZone">
+            <div id="placeholder" class="placeholder-text">
+                Drop page photo here or use "Upload / Camera"
+            </div>
+            <div class="canvas-wrapper" id="canvasWrapper" style="display: none;">
+                <canvas id="viewCanvas"></canvas>
+            </div>
+        </div>
+
+        <!-- Controls Sidebar -->
+        <div class="sidebar">
+            <div class="panel">
+                <div class="panel-title">1. Capture Source</div>
+                <input type="file" id="fileInput" accept="image/*">
+                <button class="btn" onclick="document.getElementById('fileInput').click()">📁 Browse Image</button>
+                <button class="btn btn-outline" id="cameraBtn">📷 Snap Webcam</button>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">2. Processing Filter</div>
+                <select id="filterSelect" disabled>
+                    <option value="bw">Crisp B&W (Pencil & Pen)</option>
+                    <option value="grayscale">Clean Grayscale</option>
+                    <option value="magic">Magic Color Boost</option>
+                    <option value="original">Original Photo</option>
+                </select>
+                <div class="deskew-controls">
+                    <label class="deskew-label" for="deskewRange">
+                        Rotate image
+                        <output id="rotationDegrees" for="deskewRange">0°</output>
+                    </label>
+                    <input type="range" id="deskewRange" min="-180" max="180" step="any" value="0" disabled>
+                    <div class="deskew-range-labels">
+                        <span>−180°</span>
+                        <span>+180°</span>
+                    </div>
+                </div>
+                <button class="btn btn-outline" id="resetCornersBtn" disabled>Reset Corners</button>
+                <div class="deskew-controls">
+                    <button class="btn btn-outline" id="resetRotationBtn" disabled>Reset Rotation</button>
+                    <p class="deskew-help">Drag the rotation bar above to turn the source image by any angle. The preview shows the flattened result.</p>
+                    <div class="deskew-preview">
+                        <img id="deskewPreview" alt="Flattened page preview">
+                        <span class="deskew-preview-status" id="deskewPreviewStatus">Load an image to preview straightening.</span>
+                    </div>
+                </div>
+                <button class="btn btn-green" id="addPageBtn" disabled>+ Add Page</button>
+            </div>
+
+            <div class="panel">
+                <div class="panel-title">3. Document Output (<span id="pageCount">0</span>)</div>
+                <div class="page-list" id="pageList"></div>
+                <button class="btn btn-green" id="exportPdfBtn" disabled>📥 Download Clean PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const viewCanvas = document.getElementById('viewCanvas');
+        const ctx = viewCanvas.getContext('2d');
+        const canvasWrapper = document.getElementById('canvasWrapper');
+        const placeholder = document.getElementById('placeholder');
+        const filterSelect = document.getElementById('filterSelect');
+        const resetCornersBtn = document.getElementById('resetCornersBtn');
+        const addPageBtn = document.getElementById('addPageBtn');
+        const exportPdfBtn = document.getElementById('exportPdfBtn');
+        const pageList = document.getElementById('pageList');
+        const pageCountSpan = document.getElementById('pageCount');
+        const cameraBtn = document.getElementById('cameraBtn');
+        const deskewRange = document.getElementById('deskewRange');
+        const rotationDegreesOutput = document.getElementById('rotationDegrees');
+        const resetRotationBtn = document.getElementById('resetRotationBtn');
+        const deskewPreview = document.getElementById('deskewPreview');
+        const deskewPreviewStatus = document.getElementById('deskewPreviewStatus');
+
+        let rawImg = null;
+        let baseImg = null;
+        let sourceRotationDegrees = 0;
+        let corners = [];
+        let activeCornerIndex = -1;
+        let previewTimeout = null;
+        let previewRequest = 0;
+        const pages = [];
+
+        // Handle Image Upload
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) loadImage(file);
+        });
+
+        // Drag and drop image
+        window.addEventListener('dragover', (e) => e.preventDefault());
+        window.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]);
+        });
+
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                rawImg = new Image();
+                rawImg.onload = () => {
+                    baseImg = rawImg;
+                    sourceRotationDegrees = 0;
+                    initCorners();
+                    deskewRange.value = '0';
+                    rotationDegreesOutput.textContent = '0°';
+                    enableControls();
+                    renderInteractiveCanvas();
+                    scheduleDeskewPreview();
+                };
+                rawImg.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // Initialize Corner Handles with default margin
+        function initCorners() {
+            const w = rawImg.width;
+            const h = rawImg.height;
+            corners = [
+                { x: w * 0.1, y: h * 0.1 }, // Top-Left
+                { x: w * 0.9, y: h * 0.1 }, // Top-Right
+                { x: w * 0.9, y: h * 0.9 }, // Bottom-Right
+                { x: w * 0.1, y: h * 0.9 }  // Bottom-Left
+            ];
+        }
+
+        function enableControls() {
+            placeholder.style.display = 'none';
+            canvasWrapper.style.display = 'inline-block';
+            filterSelect.disabled = false;
+            resetCornersBtn.disabled = false;
+            deskewRange.disabled = false;
+            resetRotationBtn.disabled = false;
+            addPageBtn.disabled = false;
+        }
+
+        function setImageRotation(degrees) {
+            if (!baseImg) return;
+
+            const oldRadians = sourceRotationDegrees * Math.PI / 180;
+            const newRadians = degrees * Math.PI / 180;
+            const baseWidth = baseImg.width;
+            const baseHeight = baseImg.height;
+            const oldWidth = rawImg.width;
+            const oldHeight = rawImg.height;
+            const rotatedWidth = Math.max(1, Math.ceil(
+                baseWidth * Math.abs(Math.cos(newRadians)) + baseHeight * Math.abs(Math.sin(newRadians))
+            ));
+            const rotatedHeight = Math.max(1, Math.ceil(
+                baseWidth * Math.abs(Math.sin(newRadians)) + baseHeight * Math.abs(Math.cos(newRadians))
+            ));
+            const rotatedCanvas = document.createElement('canvas');
+            rotatedCanvas.width = rotatedWidth;
+            rotatedCanvas.height = rotatedHeight;
+            const rotatedCtx = rotatedCanvas.getContext('2d');
+            rotatedCtx.translate(rotatedWidth / 2, rotatedHeight / 2);
+            rotatedCtx.rotate(newRadians);
+            rotatedCtx.drawImage(baseImg, -baseWidth / 2, -baseHeight / 2);
+
+            corners = corners.map(point => {
+                const oldX = point.x - oldWidth / 2;
+                const oldY = point.y - oldHeight / 2;
+                const baseX = baseWidth / 2 +
+                    Math.cos(oldRadians) * oldX + Math.sin(oldRadians) * oldY;
+                const baseY = baseHeight / 2 -
+                    Math.sin(oldRadians) * oldX + Math.cos(oldRadians) * oldY;
+                const baseOffsetX = baseX - baseWidth / 2;
+                const baseOffsetY = baseY - baseHeight / 2;
+                return {
+                    x: rotatedWidth / 2 +
+                        Math.cos(newRadians) * baseOffsetX - Math.sin(newRadians) * baseOffsetY,
+                    y: rotatedHeight / 2 +
+                        Math.sin(newRadians) * baseOffsetX + Math.cos(newRadians) * baseOffsetY
+                };
+            });
+
+            rawImg = rotatedCanvas;
+            sourceRotationDegrees = degrees;
+            renderInteractiveCanvas();
+            scheduleDeskewPreview();
+        }
+
+        function updateRotationControls(degrees) {
+            const sliderDegrees = ((degrees + 180) % 360 + 360) % 360 - 180;
+            rotationDegreesOutput.textContent = `${Number(sliderDegrees.toFixed(1))}°`;
+            deskewRange.value = String(sliderDegrees);
+        }
+
+        // Render Canvas with Pin Markers
+        function renderInteractiveCanvas() {
+            if (!rawImg) return;
+            viewCanvas.width = rawImg.width;
+            viewCanvas.height = rawImg.height;
+
+            ctx.drawImage(rawImg, 0, 0);
+
+            // Draw bounding polygon
+            ctx.beginPath();
+            ctx.moveTo(corners[0].x, corners[0].y);
+            for (let i = 1; i < 4; i++) {
+                ctx.lineTo(corners[i].x, corners[i].y);
+            }
+            ctx.closePath();
+            ctx.lineWidth = Math.max(4, rawImg.width * 0.004);
+            ctx.strokeStyle = '#3b82f6';
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
+            ctx.fill();
+
+            // Draw Pins
+            corners.forEach((pt) => {
+                const radius = Math.max(12, rawImg.width * 0.015);
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                ctx.lineWidth = Math.max(3, radius * 0.25);
+                ctx.strokeStyle = '#3b82f6';
+                ctx.stroke();
+            });
+        }
+
+        // Corner Dragging Interactions
+        function getCanvasCoordinates(e) {
+            const rect = viewCanvas.getBoundingClientRect();
+            const scaleX = viewCanvas.width / rect.width;
+            const scaleY = viewCanvas.height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+
+        viewCanvas.addEventListener('mousedown', (e) => {
+            if (!rawImg) return;
+            const pos = getCanvasCoordinates(e);
+            const threshold = Math.max(30, rawImg.width * 0.04);
+            activeCornerIndex = corners.findIndex(pt => Math.hypot(pt.x - pos.x, pt.y - pos.y) < threshold);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (activeCornerIndex === -1 || !rawImg) return;
+            const pos = getCanvasCoordinates(e);
+            corners[activeCornerIndex] = {
+                x: Math.max(0, Math.min(rawImg.width, pos.x)),
+                y: Math.max(0, Math.min(rawImg.height, pos.y))
+            };
+            renderInteractiveCanvas();
+        });
+
+        window.addEventListener('mouseup', () => {
+            const hadActiveCorner = activeCornerIndex !== -1;
+            activeCornerIndex = -1;
+            if (hadActiveCorner) scheduleDeskewPreview();
+        });
+
+        resetCornersBtn.addEventListener('click', () => {
+            initCorners();
+            renderInteractiveCanvas();
+            scheduleDeskewPreview();
+        });
+
+        // Perspective Crop & Unskew Engine
+        async function generateWarpedPage(image, pageCorners, filterType, maxPixels = 20000000) {
+            const wTop = Math.hypot(pageCorners[1].x - pageCorners[0].x, pageCorners[1].y - pageCorners[0].y);
+            const wBot = Math.hypot(pageCorners[2].x - pageCorners[3].x, pageCorners[2].y - pageCorners[3].y);
+            const hLeft = Math.hypot(pageCorners[3].x - pageCorners[0].x, pageCorners[3].y - pageCorners[0].y);
+            const hRight = Math.hypot(pageCorners[2].x - pageCorners[1].x, pageCorners[2].y - pageCorners[1].y);
+
+            let targetWidth = Math.max(1, Math.round(Math.max(wTop, wBot)));
+            let targetHeight = Math.max(1, Math.round(Math.max(hLeft, hRight)));
+            const scale = Math.min(1, Math.sqrt(maxPixels / (targetWidth * targetHeight)));
+            targetWidth = Math.max(1, Math.round(targetWidth * scale));
+            targetHeight = Math.max(1, Math.round(targetHeight * scale));
+
+            const outCanvas = document.createElement('canvas');
+            outCanvas.width = targetWidth;
+            outCanvas.height = targetHeight;
+            const outCtx = outCanvas.getContext('2d');
+            const sourceCanvas = document.createElement('canvas');
+            sourceCanvas.width = image.width;
+            sourceCanvas.height = image.height;
+            const sourceCtx = sourceCanvas.getContext('2d');
+            sourceCtx.drawImage(image, 0, 0);
+            const sourcePixels = sourceCtx.getImageData(0, 0, image.width, image.height);
+            const outputPixels = outCtx.createImageData(targetWidth, targetHeight);
+            const sourceAt = createProjectiveMapper(pageCorners);
+            const sourcePoint = { x: 0, y: 0 };
+            const sourceWidth = image.width;
+            const sourceHeight = image.height;
+
+            for (let y = 0; y < targetHeight; y++) {
+                const v = (y + 0.5) / targetHeight;
+                for (let x = 0; x < targetWidth; x++) {
+                    const source = sourceAt((x + 0.5) / targetWidth, v, sourcePoint);
+                    const sampleX = Math.max(0, Math.min(sourceWidth - 1, source.x - 0.5));
+                    const sampleY = Math.max(0, Math.min(sourceHeight - 1, source.y - 0.5));
+                    const x0 = Math.floor(sampleX);
+                    const y0 = Math.floor(sampleY);
+                    const x1 = Math.min(sourceWidth - 1, x0 + 1);
+                    const y1 = Math.min(sourceHeight - 1, y0 + 1);
+                    const xWeight = sampleX - x0;
+                    const yWeight = sampleY - y0;
+                    const topLeft = (y0 * sourceWidth + x0) * 4;
+                    const topRight = (y0 * sourceWidth + x1) * 4;
+                    const bottomLeft = (y1 * sourceWidth + x0) * 4;
+                    const bottomRight = (y1 * sourceWidth + x1) * 4;
+                    const outputIndex = (y * targetWidth + x) * 4;
+
+                    for (let channel = 0; channel < 4; channel++) {
+                        const top = sourcePixels.data[topLeft + channel] * (1 - xWeight) +
+                            sourcePixels.data[topRight + channel] * xWeight;
+                        const bottom = sourcePixels.data[bottomLeft + channel] * (1 - xWeight) +
+                            sourcePixels.data[bottomRight + channel] * xWeight;
+                        outputPixels.data[outputIndex + channel] = top * (1 - yWeight) + bottom * yWeight;
+                    }
+                }
+                if (y % 64 === 63) await new Promise(resolve => requestAnimationFrame(resolve));
+            }
+
+            outCtx.putImageData(outputPixels, 0, 0);
+            applyFilter(outCtx, targetWidth, targetHeight, filterType);
+
+            return {
+                data: outCanvas.toDataURL('image/jpeg', 0.95),
+                width: targetWidth,
+                height: targetHeight
+            };
+        }
+
+        function scheduleDeskewPreview() {
+            clearTimeout(previewTimeout);
+            const request = ++previewRequest;
+            if (!rawImg) return;
+
+            previewTimeout = setTimeout(async () => {
+                deskewPreviewStatus.textContent = 'Updating preview…';
+                deskewPreview.style.display = 'none';
+                deskewPreviewStatus.style.display = 'inline';
+                try {
+                    const preview = await generateWarpedPage(
+                        rawImg,
+                        corners.map(point => ({ ...point })),
+                        filterSelect.value,
+                        500000
+                    );
+                    if (request !== previewRequest) return;
+                    deskewPreview.src = preview.data;
+                    deskewPreview.style.display = 'block';
+                    deskewPreviewStatus.style.display = 'none';
+                } catch (error) {
+                    if (request !== previewRequest) return;
+                    console.error('Unable to generate straightening preview.', error);
+                    deskewPreviewStatus.textContent = `Preview failed: ${error.message}`;
+                }
+            }, 200);
+        }
+
+        deskewRange.addEventListener('input', () => {
+            const degrees = Number(deskewRange.value);
+            updateRotationControls(degrees);
+            setImageRotation(degrees);
+        });
+
+        resetRotationBtn.addEventListener('click', () => {
+            updateRotationControls(0);
+            setImageRotation(0);
+        });
+
+        filterSelect.addEventListener('change', scheduleDeskewPreview);
+
+        function createProjectiveMapper(pts) {
+            // Solve [u, v, 1] / [g*u + h*v + 1] -> source coordinates.
+            const matrix = [];
+            pts.forEach((point, i) => {
+                const uv = [[0, 0], [1, 0], [1, 1], [0, 1]][i];
+                const [u, v] = uv;
+                matrix.push([u, v, 1, 0, 0, 0, -point.x * u, -point.x * v, point.x]);
+                matrix.push([0, 0, 0, u, v, 1, -point.y * u, -point.y * v, point.y]);
+            });
+
+            // Gaussian elimination with partial pivoting for the 8x8 homography system.
+            for (let col = 0; col < 8; col++) {
+                let pivot = col;
+                for (let row = col + 1; row < 8; row++) {
+                    if (Math.abs(matrix[row][col]) > Math.abs(matrix[pivot][col])) pivot = row;
+                }
+                if (Math.abs(matrix[pivot][col]) < 1e-10) return (u, v, point = {}) => {
+                    point.x = pts[0].x + u * (pts[1].x - pts[0].x) + v * (pts[3].x - pts[0].x);
+                    point.y = pts[0].y + u * (pts[1].y - pts[0].y) + v * (pts[3].y - pts[0].y);
+                    return point;
+                };
+                [matrix[col], matrix[pivot]] = [matrix[pivot], matrix[col]];
+                const divisor = matrix[col][col];
+                for (let j = col; j <= 8; j++) matrix[col][j] /= divisor;
+                for (let row = 0; row < 8; row++) {
+                    if (row === col) continue;
+                    const factor = matrix[row][col];
+                    for (let j = col; j <= 8; j++) matrix[row][j] -= factor * matrix[col][j];
+                }
+            }
+            const h = matrix.map(row => row[8]);
+            return (u, v, point = {}) => {
+                const denominator = h[6] * u + h[7] * v + 1;
+                point.x = (h[0] * u + h[1] * v + h[2]) / denominator;
+                point.y = (h[3] * u + h[4] * v + h[5]) / denominator;
+                return point;
+            };
+        }
+
+        // Clean Photocopy & B&W High-Contrast Filter
+        function applyFilter(ctx, width, height, type) {
+            if (type === 'original') return;
+
+            const imgData = ctx.getImageData(0, 0, width, height);
+            const data = imgData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                if (type === 'bw') {
+                    // Smooth S-curve contrast: pushes gray background to pure white while preserving smooth pen anti-aliasing
+                    let normalized = gray / 255;
+                    let contrastVal = (normalized - 0.45) * 4.5;
+                    let smooth = 1 / (1 + Math.exp(-contrastVal));
+                    let finalVal = Math.min(255, Math.max(0, Math.round(smooth * 255)));
+
+                    data[i] = finalVal;
+                    data[i + 1] = finalVal;
+                    data[i + 2] = finalVal;
+                } else if (type === 'grayscale') {
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                } else if (type === 'magic') {
+                    data[i] = Math.min(255, Math.max(0, (r - 128) * 1.35 + 138));
+                    data[i + 1] = Math.min(255, Math.max(0, (g - 128) * 1.35 + 138));
+                    data[i + 2] = Math.min(255, Math.max(0, (b - 128) * 1.35 + 138));
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        // Page Stacking
+        addPageBtn.addEventListener('click', async () => {
+            addPageBtn.disabled = true;
+            try {
+                const sourceImage = rawImg;
+                const pageCorners = corners.map(point => ({ ...point }));
+                const processedPage = await generateWarpedPage(
+                    sourceImage,
+                    pageCorners,
+                    filterSelect.value
+                );
+                pages.push(processedPage);
+                updatePageQueue();
+            } catch (error) {
+                console.error('Unable to straighten scanned page.', error);
+                alert(`Unable to straighten this page: ${error.message}`);
+            } finally {
+                addPageBtn.disabled = false;
+            }
+        });
+
+        function updatePageQueue() {
+            pageList.innerHTML = '';
+            pages.forEach((pageData, index) => {
+                const thumb = document.createElement('div');
+                thumb.className = 'page-thumb';
+                thumb.innerHTML = `
+                    <img src="${pageData.data}">
+                    <button class="del-btn" onclick="removePage(${index})">×</button>
+                `;
+                pageList.appendChild(thumb);
+            });
+
+            pageCountSpan.textContent = pages.length;
+            exportPdfBtn.disabled = pages.length === 0;
+        }
+
+        window.removePage = function(index) {
+            pages.splice(index, 1);
+            updatePageQueue();
+        };
+
+        // Multi-page PDF Compilation (Offline)
+        exportPdfBtn.addEventListener('click', () => {
+            if (pages.length === 0) return;
+            const { jsPDF } = window.jspdf;
+            const firstPageLandscape = pages[0].width > pages[0].height;
+            const doc = new jsPDF({
+                orientation: firstPageLandscape ? 'landscape' : 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            pages.forEach((page, index) => {
+                const landscape = page.width > page.height;
+                if (index > 0) doc.addPage('a4', landscape ? 'landscape' : 'portrait');
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const pageHeight = doc.internal.pageSize.getHeight();
+                const margin = 5;
+                const fit = Math.min((pageWidth - margin * 2) / page.width, (pageHeight - margin * 2) / page.height);
+                const width = page.width * fit;
+                const height = page.height * fit;
+                doc.addImage(page.data, 'JPEG', (pageWidth - width) / 2, (pageHeight - height) / 2, width, height);
+            });
+
+            doc.save(`scan_${Date.now()}.pdf`);
+        });
+
+        // Direct Webcam Snap
+        cameraBtn.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                video.onloadedmetadata = () => {
+                    const snapCanvas = document.createElement('canvas');
+                    snapCanvas.width = video.videoWidth;
+                    snapCanvas.height = video.videoHeight;
+                    snapCanvas.getContext('2d').drawImage(video, 0, 0);
+                    stream.getTracks().forEach(t => t.stop());
+
+                    rawImg = new Image();
+                    rawImg.onload = () => {
+                        baseImg = rawImg;
+                        sourceRotationDegrees = 0;
+                        initCorners();
+                        deskewRange.value = '0';
+                        rotationDegreesOutput.textContent = '0°';
+                        enableControls();
+                        renderInteractiveCanvas();
+                        scheduleDeskewPreview();
+                    };
+                    rawImg.src = snapCanvas.toDataURL('image/jpeg');
+                };
+            } catch (err) {
+                alert('Camera permission denied or unavailable.');
+            }
+        });
+    </script>
+</body>
+</html>

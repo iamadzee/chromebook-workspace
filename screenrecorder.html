@@ -26,8 +26,16 @@
             padding: 15px 25px;
             border-radius: 8px;
             display: flex;
+            align-items: center;
+            flex-wrap: wrap;
             gap: 15px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        input, select {
+            padding: 10px;
+            border: 1px solid #666;
+            border-radius: 5px;
+            font-size: 14px;
         }
         button {
             color: white;
@@ -43,94 +51,117 @@
         #startButton:hover { background-color: #218838; }
         #stopButton { background-color: #dc3545; display: none; }
         #stopButton:hover { background-color: #c82333; }
-        video {
-            width: 100vw;
-            height: 100vh;
-            object-fit: contain;
+        @media (max-width: 600px) {
+            #controls {
+                left: 10px;
+                right: 10px;
+                padding: 12px;
+                gap: 8px;
+            }
+            button, input, select {
+                box-sizing: border-box;
+                max-width: 100%;
+            }
         }
     </style>
 </head>
 <body>
 
     <div id="controls">
+        <label for="fileName">File name</label>
+        <input id="fileName" type="text" value="screen-recording" maxlength="100" aria-label="Recording file name">
+        <label for="fileExtension">Format</label>
+        <select id="fileExtension" aria-label="Recording file format">
+            <option value="webm">WebM</option>
+            <option value="mp4">MP4</option>
+        </select>
         <button id="startButton">1. Select & Start Recording</button>
         <button id="stopButton">2. Stop & Save Video</button>
     </div>
 
-    <video id="videoDisplay" autoplay playsinline muted></video>
-
     <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
-        }
-
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
-        const videoDisplay = document.getElementById('videoDisplay');
-
+        const fileNameInput = document.getElementById('fileName');
+        const fileExtensionInput = document.getElementById('fileExtension');
         let mediaRecorder;
+        let mediaStream;
         let recordedChunks = [];
 
+        function getSupportedMimeType(extension) {
+            const candidates = extension === 'mp4'
+                ? ['video/mp4; codecs="avc1.42E01E,mp4a.40.2"', 'video/mp4; codecs="avc1.42E01E"', 'video/mp4']
+                : ['video/webm; codecs="vp8,opus"', 'video/webm; codecs="vp8"', 'video/webm'];
+            return candidates.find(type => MediaRecorder.isTypeSupported(type));
+        }
+
+        function stopTracks() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+        }
+
         startButton.addEventListener('click', async () => {
+            const extension = fileExtensionInput.value;
+            const mimeType = getSupportedMimeType(extension);
+            if (!mimeType) {
+                alert(`This browser cannot record ${extension.toUpperCase()} video. Choose another format.`);
+                return;
+            }
+
             try {
-                const mediaStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { displaySurface: "window" },
-                    audio: true 
+                mediaStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { frameRate: { ideal: 30, max: 60 } },
+                    audio: true
                 });
-
-                videoDisplay.srcObject = mediaStream;
                 recordedChunks = [];
-
                 mediaRecorder = new MediaRecorder(mediaStream, {
-                    mimeType: 'video/webm; codecs=vp9'
+                    mimeType,
+                    videoBitsPerSecond: 2500000
                 });
 
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
-                    }
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) recordedChunks.push(event.data);
                 };
+
                 mediaRecorder.onstop = () => {
-                    const blob = new Blob(recordedChunks, { type: 'video/webm' })
-                    const url = URL.createObjectURL(blob);
-                    
-                    
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url
-                    a.download = `flatpak-capture-${Date.now()}.webm`
-                    document.body.appendChild(a);
-                    a.click();
-                    
-                    // Cleanup
-                    setTimeout(() => {
-                        document.body.removeChild(a);
-                        URL.revokeObjectURL(url);
-                    }, 100);
+                    if (recordedChunks.length) {
+                        const blob = new Blob(recordedChunks, { type: mimeType });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        const safeName = fileNameInput.value.trim()
+                            .replace(/[\\/:*?"<>|]/g, '_') || 'screen-recording';
+                        link.href = url;
+                        link.download = `${safeName}.${extension}`;
+                        link.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    }
+                    recordedChunks = [];
+                    stopTracks();
                     startButton.style.display = 'inline-block';
                     stopButton.style.display = 'none';
                 };
 
-                mediaStream.getVideoTracks()[0].onended = () => {
-                    if (mediaRecorder.state !== 'inactive') {
-                        mediaRecorder.stop();
-                    }
-                };
-                mediaRecorder.start();
+                const videoTrack = mediaStream.getVideoTracks()[0];
+                if (videoTrack) {
+                    videoTrack.addEventListener('ended', () => {
+                        if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+                    }, { once: true });
+                }
+
+                mediaRecorder.start(5000);
                 startButton.style.display = 'none';
                 stopButton.style.display = 'inline-block';
-
             } catch (error) {
-                console.error("Recording error:", error);
-                alert("Failed to start recording. Make sure window sharing permissions are allowed.");
+                console.error('Recording error:', error);
+                stopTracks();
+                alert('Failed to start recording. Check sharing permissions and try a supported format.');
             }
         });
 
         stopButton.addEventListener('click', () => {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-                videoDisplay.srcObject.getTracks().forEach(track => track.stop());
-            }
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
         });
 
     </script>

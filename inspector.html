@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Draft & Markdown Inspector</title>
+    <!-- Marked.js for fast client-side markdown parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b111e;
+            --card-bg: rgba(22, 32, 54, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+            --text-main: #f1f5f9;
+            --text-dim: #94a3b8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 17, 30, 0.85);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .back-link {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #fff; }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+            flex: 1;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        @media (max-width: 1024px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .editor-workspace {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-dim);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: white;
+        }
+
+        .views-container {
+            position: relative;
+            flex: 1;
+            min-height: 520px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+        }
+
+        textarea {
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            color: var(--text-main);
+            border: none;
+            padding: 1.5rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .preview-box {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 2rem;
+            overflow-y: auto;
+            display: none;
+            line-height: 1.7;
+            font-size: 1rem;
+            color: #e2e8f0;
+        }
+
+        /* Clean Markdown Rendering Styles */
+        .preview-box h1, .preview-box h2, .preview-box h3 {
+            margin-top: 1.25rem;
+            margin-bottom: 0.75rem;
+            color: #fff;
+        }
+        .preview-box p { margin-bottom: 1rem; }
+        .preview-box ul, .preview-box ol { margin-left: 1.5rem; margin-bottom: 1rem; }
+        .preview-box blockquote {
+            border-left: 4px solid var(--accent-blue);
+            padding-left: 1rem;
+            margin-bottom: 1rem;
+            color: var(--text-dim);
+        }
+        .preview-box code {
+            background: rgba(255,255,255,0.1);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .stat-card {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.75rem;
+            text-align: center;
+        }
+
+        .stat-val {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            margin-top: 0.25rem;
+        }
+
+        .target-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.3);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .target-box input {
+            width: 80px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: #fff;
+            padding: 0.3rem 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+            outline: none;
+        }
+
+        .progress-bar-bg {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: var(--accent-blue);
+            transition: width 0.3s, background-color 0.3s;
+        }
+
+        .tag-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .word-chip {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .word-chip:hover {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.65rem 1rem;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+        .btn-outline:hover { background: rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="back-link">← Back to Hub</a>
+        <h1>Academic Draft & Markdown Inspector</h1>
+        <div style="width: 80px;"></div>
+    </header>
+
+    <div class="container">
+        <!-- Main Writing / Preview Area -->
+        <div class="editor-workspace">
+            <div class="tabs">
+                <button class="tab-btn active" id="rawTab">Edit (Markdown)</button>
+                <button class="tab-btn" id="previewTab">Live Preview</button>
+            </div>
+
+            <div class="views-container">
+                <textarea id="editor" placeholder="# Write or paste your markdown draft here...&#10;&#10;Words, sentences, reading grade, and repetition will calculate live."></textarea>
+                <div class="preview-box" id="preview"></div>
+            </div>
+        </div>
+
+        <!-- Sidebar Analytics -->
+        <div class="sidebar">
+            <!-- Word Count & Target Section -->
+            <div class="panel">
+                <div class="panel-title">Word Cap Target</div>
+                <div class="target-box">
+                    <span style="font-size: 0.85rem; color: var(--text-dim);">Target Cap:</span>
+                    <input type="number" id="wordTarget" value="1000" step="50">
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-dim);">
+                        <span id="targetStatus">0 / 1000 words</span>
+                        <span id="targetPercent">0%</span>
+                    </div>
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="progressFill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Primary Metrics -->
+            <div class="panel">
+                <div class="panel-title">Draft Metrics</div>
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-val" id="wordCount">0</div>
+                        <div class="stat-label">Words</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="charCount">0</div>
+                        <div class="stat-label">Characters</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="readingLevel">-</div>
+                        <div class="stat-label">Grade Level</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="readingTime">0m</div>
+                        <div class="stat-label">Reading Time</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overused Word & Repetition Tracker -->
+            <div class="panel">
+                <div class="panel-title">Frequent Vocabulary</div>
+                <div class="tag-cloud" id="tagCloud">
+                    <span style="font-size: 0.8rem; color: var(--text-dim);">Type to detect repeats...</span>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="panel">
+                <button class="btn btn-outline" id="copyMarkdownBtn">📋 Copy Markdown</button>
+                <button class="btn btn-outline" id="downloadMdBtn">💾 Download .md File</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        const rawTab = document.getElementById('rawTab');
+        const previewTab = document.getElementById('previewTab');
+
+        const wordCountEl = document.getElementById('wordCount');
+        const charCountEl = document.getElementById('charCount');
+        const readingLevelEl = document.getElementById('readingLevel');
+        const readingTimeEl = document.getElementById('readingTime');
+        const targetStatusEl = document.getElementById('targetStatus');
+        const targetPercentEl = document.getElementById('targetPercent');
+        const progressFillEl = document.getElementById('progressFill');
+        const wordTargetInput = document.getElementById('wordTarget');
+        const tagCloud = document.getElementById('tagCloud');
+
+        // Common stopwords to exclude from repetition tracking
+        const stopWords = new Set([
+            'the','and','to','of','a','in','that','is','was','for','it','with','as','on',
+            'be','at','by','this','have','from','or','one','you','all','they','an','are',
+            'we','our','which','their','has','but','not','more','also','can','these','its'
+        ]);
+
+        // Switch between Editor & Preview
+        rawTab.addEventListener('click', () => {
+            rawTab.classList.add('active');
+            previewTab.classList.remove('active');
+            editor.style.display = 'block';
+            preview.style.display = 'none';
+        });
+
+        previewTab.addEventListener('click', () => {
+            previewTab.classList.add('active');
+            rawTab.classList.remove('active');
+            preview.innerHTML = marked.parse(editor.value || '*Nothing to preview.*');
+            editor.style.display = 'none';
+            preview.style.display = 'block';
+        });
+
+        // Fast Syllable Counter for Flesch-Kincaid Grade Level
+        function countSyllables(word) {
+            word = word.toLowerCase().replace(/[^a-z]/g, '');
+            if (!word) return 0;
+            if (word.length <= 3) return 1;
+            word = word.replace(/(?:[^laeiouy]|ed|es|e)$/, '');
+            word = word.replace(/^y/, '');
+            const matches = word.match(/[aeiouy]{1,2}/g);
+            return matches ? matches.length : 1;
+        }
+
+        // Live Text Analysis
+        function analyzeText() {
+            const text = editor.value.trim();
+
+            if (!text) {
+                wordCountEl.textContent = '0';
+                charCountEl.textContent = '0';
+                readingLevelEl.textContent = '-';
+                readingTimeEl.textContent = '0m';
+                updateProgress(0);
+                tagCloud.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-dim);">Type to detect repeats...</span>';
+                return;
+            }
+
+            // Word extraction (strips markdown formatting)
+            const cleanText = text.replace(/[#*`_~\[\]()>-]/g, ' ');
+            const words = cleanText.match(/\b[A-Za-z0-9'-]+\b/g) || [];
+            const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+
+            const totalWords = words.length;
+            const totalChars = text.length;
+            const totalSentences = Math.max(1, sentences.length);
+
+            wordCountEl.textContent = totalWords;
+            charCountEl.textContent = totalChars;
+
+            // Reading Time (assumes standard 200 words per minute)
+            const minutes = Math.ceil(totalWords / 200);
+            readingTimeEl.textContent = `${minutes}m`;
+
+            // Flesch-Kincaid Grade Level Calculation
+            let totalSyllables = 0;
+            words.forEach(w => totalSyllables += countSyllables(w));
+
+            const grade = 0.39 * (totalWords / totalSentences) + 11.8 * (totalSyllables / totalWords) - 15.59;
+            const finalGrade = Math.max(1, Math.round(grade));
+            readingLevelEl.textContent = totalWords > 15 ? `Gr ${finalGrade}` : '-';
+
+            // Word Frequency & Repetition Tracker
+            const freq = {};
+            words.forEach(w => {
+                const lower = w.toLowerCase();
+                if (lower.length > 2 && !stopWords.has(lower)) {
+                    freq[lower] = (freq[lower] || 0) + 1;
+                }
+            });
+
+            // Sort by frequency
+            const sortedWords = Object.entries(freq)
+                .filter(([_, count]) => count > 1)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 12);
+
+            tagCloud.innerHTML = '';
+            if (sortedWords.length === 0) {
+                tagCloud.innerHTML = '<span style="font-size: 0.8rem; color: var(--text-dim);">No significant repeats found.</span>';
+            } else {
+                sortedWords.forEach(([w, count]) => {
+                    const chip = document.createElement('span');
+                    chip.className = 'word-chip';
+                    chip.textContent = `${w} (${count})`;
+                    chip.title = `Used ${count} times`;
+                    tagCloud.appendChild(chip);
+                });
+            }
+
+            updateProgress(totalWords);
+        }
+
+        // Target progress bar
+        function updateProgress(words) {
+            const target = parseInt(wordTargetInput.value) || 1000;
+            const percent = Math.min(100, Math.round((words / target) * 100));
+
+            targetStatusEl.textContent = `${words} / ${target} words`;
+            targetPercentEl.textContent = `${percent}%`;
+            progressFillEl.style.width = `${percent}%`;
+
+            if (words > target) {
+                progressFillEl.style.backgroundColor = 'var(--accent-red)';
+            } else if (percent >= 85) {
+                progressFillEl.style.backgroundColor = 'var(--accent-green)';
+            } else {
+                progressFillEl.style.backgroundColor = 'var(--accent-blue)';
+            }
+        }
+
+        editor.addEventListener('input', () => {
+            analyzeText();
+            localStorage.setItem('academic_draft_autosave', editor.value);
+        });
+
+        wordTargetInput.addEventListener('input', () => {
+            const words = (editor.value.match(/\b[A-Za-z0-9'-]+\b/g) || []).length;
+            updateProgress(words);
+        });
+
+        // Copy / Export Utilities
+        document.getElementById('copyMarkdownBtn').addEventListener('click', () => {
+            navigator.clipboard.writeText(editor.value).then(() => {
+                alert('Markdown copied to clipboard!');
+            });
+        });
+
+        document.getElementById('downloadMdBtn').addEventListener('click', () => {
+            const blob = new Blob([editor.value], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `draft-${Date.now()}.md`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        // Restore draft from localStorage
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('academic_draft_autosave');
+            if (saved) {
+                editor.value = saved;
+                analyzeText();
+            }
+        });
+    </script>
+</body>
+</html>
