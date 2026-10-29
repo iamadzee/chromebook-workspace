@@ -1,8 +1,9 @@
-const CACHE_NAME = 'screen-recorder-chromebook-v2';
+const CACHE_NAME = 'screen-recorder-chromebook-v4';
 const APP_FILES = [
   '',
   'index.html',
   'runner.html',
+  'editor.html',
   'screenrecorder.html',
   'flattener.html',
   'inspector.html',

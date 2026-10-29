@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="./manifest.json">
+    <script src="./pwa.js" defer></script>
+    <title>Force-Open Hex & Config Editor</title>
+    <style>
+        :root {
+            --bg-color: #0b111e;
+            --card-bg: rgba(22, 32, 54, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+            --text-main: #f1f5f9;
+            --text-dim: #94a3b8;
+            --term-bg: #050811;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 17, 30, 0.85);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .back-link {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #fff; }
+
+        h1 { font-size: 1.25rem; font-weight: 600; }
+
+        .file-info-badge {
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background: rgba(0,0,0,0.3);
+            padding: 0.35rem 0.85rem;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-dim);
+        }
+        .status-dot.active { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 2rem;
+            background: rgba(22, 32, 54, 0.4);
+            border-bottom: 1px solid var(--border-color);
+            gap: 1rem;
+        }
+
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.45rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-green { background-color: var(--accent-green); }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+        .btn-outline:hover { background: rgba(255, 255, 255, 0.05); }
+
+        .mode-toggle {
+            display: flex;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .mode-btn {
+            background: transparent;
+            color: var(--text-dim);
+            border: none;
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .mode-btn.active {
+            background: var(--accent-blue);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .editor-container {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            min-height: 550px;
+        }
+
+        /* Text Editor Pane */
+        #textEditor {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            background: var(--term-bg);
+            color: #f8fafc;
+            border: none;
+            padding: 1.25rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+            tab-size: 4;
+        }
+
+        /* Hex Viewer Grid */
+        #hexViewer {
+            display: none;
+            flex: 1;
+            background: var(--term-bg);
+            padding: 1.25rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            overflow-y: auto;
+            white-space: pre;
+            color: #94a3b8;
+        }
+
+        .hex-offset { color: var(--accent-blue); }
+        .hex-bytes { color: #f1f5f9; margin: 0 1.5rem; }
+        .hex-ascii { color: var(--accent-green); }
+
+        .drop-hint {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-dim);
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="back-link">← Back to Hub</a>
+        <h1>Force-Open Config & Hex Editor</h1>
+        <div class="file-info-badge">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="fileBadgeText">No file loaded</span>
+        </div>
+    </header>
+
+    <div class="toolbar">
+        <div class="tool-group">
+            <button class="btn btn-outline" id="openFileBtn">📂 Open Any File</button>
+            <button class="btn btn-green" id="saveFileBtn" disabled>💾 Save File (Ctrl+S)</button>
+            <input id="fileInput" type="file" hidden>
+        </div>
+
+        <div class="tool-group">
+            <div class="mode-toggle">
+                <button class="mode-btn active" id="textModeBtn">Text / Config</button>
+                <button class="mode-btn" id="hexModeBtn">Hex View</button>
+            </div>
+        </div>
+    </div>
+
+    <main>
+        <div class="editor-container" id="containerArea">
+            <div class="drop-hint" id="dropPlaceholder">
+                <p>Click <strong>"Open Any File"</strong> to bypass ChromeOS file locks</p>
+                <span style="font-size: 0.8rem; color: #64748b;">Works directly on .cfg, .properties, .dat, .json, .log, or raw saves</span>
+            </div>
+            <textarea id="textEditor" style="display: none;" spellcheck="false"></textarea>
+            <div id="hexViewer"></div>
+        </div>
+    </main>
+
+    <script>
+        let currentFileHandle = null;
+        let currentFileName = '';
+        let fileBuffer = null;
+        let activeMode = 'text';
+
+        const openFileBtn = document.getElementById('openFileBtn');
+        const saveFileBtn = document.getElementById('saveFileBtn');
+        const textEditor = document.getElementById('textEditor');
+        const fileInput = document.getElementById('fileInput');
+        const hexViewer = document.getElementById('hexViewer');
+        const dropPlaceholder = document.getElementById('dropPlaceholder');
+        const fileBadgeText = document.getElementById('fileBadgeText');
+        const statusDot = document.getElementById('statusDot');
+        const textModeBtn = document.getElementById('textModeBtn');
+        const hexModeBtn = document.getElementById('hexModeBtn');
+
+        async function loadFile(file, fileHandle = null) {
+            currentFileHandle = fileHandle;
+            currentFileName = file.name;
+            fileBuffer = await file.arrayBuffer();
+            fileBadgeText.textContent = `${file.name} (${formatBytes(file.size)})`;
+            statusDot.classList.add('active');
+            saveFileBtn.disabled = false;
+            dropPlaceholder.style.display = 'none';
+
+            const isBinary = checkIsBinary(new Uint8Array(fileBuffer.slice(0, 1024)));
+            if (isBinary) {
+                setMode('hex');
+            } else {
+                textEditor.value = new TextDecoder('utf-8').decode(fileBuffer);
+                setMode('text');
+            }
+        }
+
+        async function openFile() {
+            if (typeof window.showOpenFilePicker !== 'function') {
+                fileInput.click();
+                return;
+            }
+
+            try {
+                const [fileHandle] = await window.showOpenFilePicker({ multiple: false });
+                await loadFile(await fileHandle.getFile(), fileHandle);
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    alert('Error reading file: ' + err.message);
+                }
+            }
+        }
+
+        // Quick heuristic to detect binary files (null bytes)
+        function checkIsBinary(bytes) {
+            for (let i = 0; i < bytes.length; i++) {
+                if (bytes[i] === 0) return true;
+            }
+            return false;
+        }
+
+        // Render Hex Viewer dump
+        function renderHexDump(buffer) {
+            const bytes = new Uint8Array(buffer);
+            const lines = [];
+            const maxBytes = Math.min(bytes.length, 32768); // Cap initial render for performance
+
+            for (let i = 0; i < maxBytes; i += 16) {
+                const offset = i.toString(16).padStart(8, '0');
+                const slice = bytes.slice(i, i + 16);
+                
+                let hexStr = '';
+                let asciiStr = '';
+
+                for (let j = 0; j < 16; j++) {
+                    if (j < slice.length) {
+                        hexStr += slice[j].toString(16).padStart(2, '0') + ' ';
+                        asciiStr += (slice[j] >= 32 && slice[j] <= 126) ? String.fromCharCode(slice[j]) : '.';
+                    } else {
+                        hexStr += '   ';
+                    }
+                    if (j === 7) hexStr += ' ';
+                }
+
+                lines.push(`<span class="hex-offset">${offset}</span> <span class="hex-bytes">${hexStr}</span> <span class="hex-ascii">${escapeHtml(asciiStr)}</span>`);
+            }
+
+            if (bytes.length > maxBytes) {
+                lines.push(`\n... truncated [displaying 32 KB of ${formatBytes(bytes.length)}] ...`);
+            }
+
+            hexViewer.innerHTML = lines.join('\n');
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        function setMode(mode) {
+            activeMode = mode;
+            if (mode === 'text') {
+                textModeBtn.classList.add('active');
+                hexModeBtn.classList.remove('active');
+                textEditor.style.display = 'block';
+                hexViewer.style.display = 'none';
+            } else {
+                hexModeBtn.classList.add('active');
+                textModeBtn.classList.remove('active');
+                textEditor.style.display = 'none';
+                hexViewer.style.display = 'block';
+                if (fileBuffer) renderHexDump(fileBuffer);
+            }
+        }
+
+        async function saveFile() {
+            if (!fileBuffer) return;
+
+            try {
+                const contents = activeMode === 'text' ? textEditor.value : fileBuffer;
+                if (currentFileHandle) {
+                    const writableStream = await currentFileHandle.createWritable();
+                    await writableStream.write(contents);
+                    await writableStream.close();
+                } else {
+                    const blob = new Blob([contents], {
+                        type: activeMode === 'text' ? 'text/plain;charset=utf-8' : 'application/octet-stream'
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = currentFileName || 'edited-file';
+                    link.click();
+                    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+                }
+
+                const originalText = fileBadgeText.textContent;
+                fileBadgeText.textContent = currentFileHandle ? 'Saved Successfully!' : 'Downloaded Edited Copy';
+                setTimeout(() => { fileBadgeText.textContent = originalText; }, 1500);
+            } catch (err) {
+                alert('Save error: ' + err.message);
+            }
+        }
+
+        // Keyboard Shortcuts: Ctrl+S to save, Tab support in text box
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (!saveFileBtn.disabled) saveFile();
+            }
+        });
+
+        textEditor.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = textEditor.selectionStart;
+                const end = textEditor.selectionEnd;
+                textEditor.value = textEditor.value.substring(0, start) + "    " + textEditor.value.substring(end);
+                textEditor.selectionStart = textEditor.selectionEnd = start + 4;
+            }
+        });
+
+        openFileBtn.addEventListener('click', openFile);
+        saveFileBtn.addEventListener('click', saveFile);
+        fileInput.addEventListener('change', async () => {
+            const [file] = fileInput.files;
+            if (file) {
+                try {
+                    await loadFile(file);
+                } catch (err) {
+                    alert('Error reading file: ' + err.message);
+                }
+            }
+            fileInput.value = '';
+        });
+        textModeBtn.addEventListener('click', () => setMode('text'));
+        hexModeBtn.addEventListener('click', () => setMode('hex'));
+    </script>
+</body>
+</html>

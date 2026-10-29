@@ -13,5 +13,20 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Config & Hex Editor",
+      "short_name": "File Editor",
+      "description": "Open text and binary files in the Config & Hex Editor",
+      "url": "./editor.html",
+      "icons": [
+        {
+          "src": "./icon-512.png",
+          "sizes": "554x554",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }
