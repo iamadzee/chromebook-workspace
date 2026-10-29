@@ -51,6 +51,17 @@
         #startButton:hover { background-color: #218838; }
         #stopButton { background-color: #dc3545; display: none; }
         #stopButton:hover { background-color: #c82333; }
+        #backToHub {
+            top:10px;
+            left:0;
+            position: absolute;
+            color: gray;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        #backtoHub:hover { background: white; }
         @media (max-width: 600px) {
             #controls {
                 left: 10px;
@@ -66,6 +77,8 @@
     </style>
 </head>
 <body>
+
+    <a id="backToHub" href="index.html">← Back to Hub</a>
 
     <div id="controls">
         <label for="fileName">File name</label>

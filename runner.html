@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instant Python Runner</title>
+    <!-- Local Pyodide bootstrap script -->
+    <script src="./pyodide/pyodide.js"></script>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --card-bg: #252526;
+            --border-color: #3c3c3c;
+            --accent-blue: #3794ff;
+            --accent-green: #4ec9b0;
+            --accent-amber: #dcdcaa;
+            --accent-red: #f14c4c;
+            --text-main: #d4d4d4;
+            --text-dim: #858585;
+            --term-bg: #181818;
+            --editor-bg: #1e1e1e;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: #181818;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .back-link {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: #fff; }
+
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .engine-status {
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(0,0,0,0.3);
+            padding: 0.35rem 0.75rem;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-amber);
+            box-shadow: 0 0 6px var(--accent-amber);
+        }
+        .status-dot.ready {
+            background: var(--accent-green);
+            box-shadow: 0 0 6px var(--accent-green);
+        }
+        .status-dot.error {
+            background: var(--accent-red);
+            box-shadow: 0 0 6px var(--accent-red);
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 1rem;
+            padding: 1rem 1.5rem;
+            flex: 1;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        @media (max-width: 950px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .pane {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            min-width: 0;
+        }
+
+        .pane-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.65rem 0.9rem;
+            border-bottom: 1px solid var(--border-color);
+            background: #252526;
+        }
+
+        .pane-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+        }
+
+        .controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.45rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-green { background-color: var(--accent-green); }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+        .btn-outline:hover { background: rgba(255, 255, 255, 0.05); }
+
+        .filename-input {
+            width: 9rem;
+            min-width: 0;
+            padding: 0.4rem 0.6rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.25);
+            color: var(--text-main);
+            font: inherit;
+        }
+        .filename-input::placeholder { color: var(--text-dim); }
+
+        .input-dialog {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: grid;
+            place-items: center;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.65);
+        }
+        .input-dialog[hidden] { display: none; }
+        .input-dialog form {
+            width: min(100%, 28rem);
+            padding: 1.25rem;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background: #162036;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+        }
+        .input-dialog label {
+            display: block;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+        .input-dialog input {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        .editor-wrap {
+            position: relative;
+            flex: 1;
+            min-height: 520px;
+            overflow: hidden;
+            background: var(--editor-bg);
+        }
+
+        .editor-highlight,
+        textarea {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 3.75rem;
+            width: calc(100% - 3.75rem);
+            height: 100%;
+            padding: 1.25rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            tab-size: 4;
+            white-space: pre;
+        }
+
+        .editor-highlight {
+            margin: 0;
+            overflow: hidden;
+            color: #d4d4d4;
+            pointer-events: none;
+        }
+
+        .line-numbers {
+            position: absolute;
+            z-index: 2;
+            top: 0;
+            left: 0;
+            width: 3.75rem;
+            padding: 1.25rem 0.8rem 1.25rem 0.25rem;
+            color: #858585;
+            font: 0.9rem/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            text-align: right;
+            user-select: none;
+            pointer-events: none;
+        }
+
+        .editor-wrap::before {
+            position: absolute;
+            z-index: 2;
+            top: 0;
+            bottom: 0;
+            left: 3.75rem;
+            border-left: 1px solid #333;
+            content: "";
+            pointer-events: none;
+        }
+
+        .editor-tabs {
+            display: flex;
+            min-height: 2.4rem;
+            background: #252526;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .editor-tab {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0 1rem;
+            color: var(--text-main);
+            background: var(--editor-bg);
+            border-top: 1px solid var(--accent-blue);
+            border-right: 1px solid var(--border-color);
+            font-size: 0.82rem;
+        }
+
+        .python-icon {
+            color: #4fc1ff;
+            font-weight: 700;
+        }
+
+        .editor-statusbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.35rem 0.75rem;
+            color: #d4d4d4;
+            background: #007acc;
+            font-size: 0.75rem;
+        }
+
+        .editor-status-details {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .syntax-keyword { color: #569cd6; }
+        .syntax-literal { color: #569cd6; }
+        .syntax-string { color: #ce9178; }
+        .syntax-number { color: #b5cea8; }
+        .syntax-comment { color: #6a9955; font-style: italic; }
+        .syntax-function { color: #dcdcaa; }
+        .syntax-builtin { color: #4ec9b0; }
+        .syntax-decorator { color: #d7ba7d; }
+
+        textarea {
+            z-index: 1;
+            min-height: 100%;
+            background: transparent;
+            color: transparent;
+            -webkit-text-fill-color: transparent;
+            caret-color: #aeafad;
+            border: none;
+            resize: none;
+            outline: none;
+            overflow: auto;
+            scrollbar-color: #475569 transparent;
+            overflow-wrap: normal;
+        }
+        textarea::selection {
+            background: rgba(38, 79, 120, 0.75);
+        }
+
+        .terminal {
+            flex: 1;
+            background: var(--term-bg);
+            padding: 1rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .term-stdout { color: #f1f5f9; }
+        .term-stderr { color: var(--accent-red); font-weight: 500; }
+        .term-info { color: var(--accent-blue); font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="back-link">← Back to Hub</a>
+        <h1>Local Python 3 (WASM)</h1>
+        <div class="engine-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Booting Interpreter...</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Script Editor -->
+        <div class="pane">
+            <div class="pane-toolbar">
+                <span class="pane-title">Python 3 Script</span>
+                <div class="controls">
+                    <button class="btn btn-outline" id="uploadFilesBtn">Upload files</button>
+                    <input type="file" id="fileInput" multiple hidden>
+                    <button class="btn btn-outline" id="resetSnippetBtn">Template</button>
+                    <button class="btn btn-green" id="runBtn" disabled>▶ Run (Ctrl+Enter)</button>
+                </div>
+            </div>
+            <div class="editor-tabs" aria-hidden="true">
+                <div class="editor-tab"><span class="python-icon">Py</span><span>main.py</span></div>
+            </div>
+            <div class="editor-wrap">
+                <div class="line-numbers" id="lineNumbers" aria-hidden="true"></div>
+                <pre class="editor-highlight" aria-hidden="true"><code id="highlightedCode"></code></pre>
+                <textarea class="editor-input" id="editor" spellcheck="false" aria-label="Python 3 script"></textarea>
+            </div>
+            <div class="editor-statusbar">
+                <span>Python 3 · UTF-8</span>
+                <div class="editor-status-details">
+                    <span id="cursorPosition">Ln 1, Col 1</span>
+                    <span>Spaces: 4</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Terminal Output -->
+        <div class="pane">
+            <div class="pane-toolbar">
+                <span class="pane-title">Terminal Console</span>
+                <div class="controls">
+                    <input class="filename-input" id="downloadFilename" type="text" aria-label="File to download" placeholder="File to download" autocomplete="off">
+                    <button class="btn btn-outline" id="downloadFileBtn" disabled>Download file</button>
+                    <button class="btn btn-outline" id="clearBtn">Clear</button>
+                </div>
+            </div>
+            <div class="terminal" id="terminal"></div>
+        </div>
+    </div>
+    <div class="input-dialog" id="inputDialog" hidden>
+        <form id="inputForm">
+            <label id="inputPrompt" for="inputValue">Input</label>
+            <input class="filename-input" id="inputValue" type="text" autocomplete="off">
+            <div class="controls">
+                <button class="btn btn-green" type="submit">Submit</button>
+                <button class="btn btn-outline" id="cancelInputBtn" type="button">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const highlightedCode = document.getElementById('highlightedCode');
+        const lineNumbers = document.getElementById('lineNumbers');
+        const cursorPosition = document.getElementById('cursorPosition');
+        const terminal = document.getElementById('terminal');
+        const runBtn = document.getElementById('runBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const uploadFilesBtn = document.getElementById('uploadFilesBtn');
+        const fileInput = document.getElementById('fileInput');
+        const downloadFilename = document.getElementById('downloadFilename');
+        const downloadFileBtn = document.getElementById('downloadFileBtn');
+        const inputDialog = document.getElementById('inputDialog');
+        const inputForm = document.getElementById('inputForm');
+        const inputPrompt = document.getElementById('inputPrompt');
+        const inputValue = document.getElementById('inputValue');
+        const cancelInputBtn = document.getElementById('cancelInputBtn');
+        const resetSnippetBtn = document.getElementById('resetSnippetBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        let pyodide = null;
+        let resolveInput = null;
+
+        const pythonTokenPattern = /#[^\n]*|(?:[rRuUbBfF]{0,2})(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|@[A-Za-z_]\w*|\b(?:and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield|match|case)\b|\b(?:True|False|None)\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b[A-Za-z_]\w*\b/g;
+        const pythonBuiltins = new Set([
+            'abs', 'all', 'any', 'ascii', 'bin', 'bool', 'breakpoint', 'bytearray',
+            'bytes', 'callable', 'chr', 'classmethod', 'compile', 'complex', 'delattr',
+            'dict', 'dir', 'divmod', 'enumerate', 'eval', 'exec', 'filter', 'float',
+            'format', 'frozenset', 'getattr', 'globals', 'hasattr', 'hash', 'help',
+            'hex', 'id', 'input', 'int', 'isinstance', 'issubclass', 'iter', 'len',
+            'list', 'locals', 'map', 'max', 'memoryview', 'min', 'next', 'object',
+            'oct', 'open', 'ord', 'pow', 'print', 'property', 'range', 'repr',
+            'reversed', 'round', 'set', 'setattr', 'slice', 'sorted', 'staticmethod',
+            'str', 'sum', 'super', 'tuple', 'type', 'vars', 'zip'
+        ]);
+
+        function escapeHtml(text) {
+            return text.replace(/[&<>"']/g, (character) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[character]);
+        }
+
+        function updateHighlight() {
+            const source = editor.value;
+            const tokenPattern = new RegExp(pythonTokenPattern.source, 'g');
+            const keywordPattern = /^(?:and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield|match|case)$/;
+            const literalPattern = /^(?:True|False|None)$/;
+            let rendered = '';
+            let lastIndex = 0;
+            let match;
+
+            while ((match = tokenPattern.exec(source)) !== null) {
+                rendered += escapeHtml(source.slice(lastIndex, match.index));
+                const token = match[0];
+                const beforeToken = source.slice(0, match.index);
+                const afterToken = source.slice(tokenPattern.lastIndex);
+                const isDefinition = /(?:async\s+)?(?:def|class)\s+$/.test(beforeToken);
+                const className = token.startsWith('#') ? 'syntax-comment'
+                    : /^(?:[rRuUbBfF]{0,2})?["']/.test(token) ? 'syntax-string'
+                    : token.startsWith('@') ? 'syntax-decorator'
+                    : keywordPattern.test(token) ? 'syntax-keyword'
+                    : literalPattern.test(token) ? 'syntax-literal'
+                    : /^\d/.test(token) ? 'syntax-number'
+                    : isDefinition ? 'syntax-function'
+                    : pythonBuiltins.has(token) ? 'syntax-builtin'
+                    : /^\s*\(/.test(afterToken) ? 'syntax-function'
+                    : '';
+                rendered += className
+                    ? `<span class="${className}">${escapeHtml(token)}</span>`
+                    : escapeHtml(token);
+                lastIndex = tokenPattern.lastIndex;
+            }
+
+            highlightedCode.innerHTML = rendered + escapeHtml(source.slice(lastIndex)) + '\n';
+            const lineCount = source.split('\n').length;
+            lineNumbers.innerHTML = Array.from({ length: lineCount }, (_, index) => index + 1).join('<br>');
+            updateCursorPosition();
+        }
+
+        function syncEditorScroll() {
+            const highlight = highlightedCode.parentElement;
+            highlight.scrollTop = editor.scrollTop;
+            highlight.scrollLeft = editor.scrollLeft;
+            lineNumbers.style.transform = `translateY(${-editor.scrollTop}px)`;
+        }
+
+        function updateCursorPosition() {
+            const beforeCursor = editor.value.slice(0, editor.selectionStart);
+            const lines = beforeCursor.split('\n');
+            cursorPosition.textContent = `Ln ${lines.length}, Col ${lines[lines.length - 1].length + 1}`;
+        }
+
+        const pythonInputSupport = `
+import ast as _ast
+
+class _InputTransformer(_ast.NodeTransformer):
+    def __init__(self, async_functions):
+        self.async_functions = async_functions
+
+    def _async_call(self, call):
+        target = call.func
+        return (
+            isinstance(target, _ast.Name) and target.id in self.async_functions
+        ) or (
+            isinstance(target, _ast.Attribute) and target.attr in self.async_functions
+        )
+
+    def visit_Await(self, node):
+        if isinstance(node.value, _ast.Call) and (
+            self._async_call(node.value)
+            or isinstance(node.value.func, _ast.Name) and node.value.func.id == "input"
+        ):
+            node.value = self._transform_call(node.value, wrap=False)
+            return node
+        return self.generic_visit(node)
+
+    def visit_Call(self, node):
+        return self._transform_call(node)
+
+    def _transform_call(self, node, wrap=True):
+        node = self.generic_visit(node)
+        if isinstance(node.func, _ast.Name) and node.func.id == "input":
+            node.func = _ast.Name(id="_runner_input", ctx=_ast.Load())
+            return _ast.copy_location(_ast.Await(value=node), node) if wrap else node
+        if wrap and self._async_call(node):
+            return _ast.copy_location(_ast.Await(value=node), node)
+        return node
+
+    def visit_FunctionDef(self, node):
+        node = self.generic_visit(node)
+        if node.name in self.async_functions:
+            node = _ast.AsyncFunctionDef(
+                name=node.name, args=node.args, body=node.body,
+                decorator_list=node.decorator_list, returns=node.returns,
+                type_comment=node.type_comment
+            )
+        return node
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+class _FunctionCalls(_ast.NodeVisitor):
+    def __init__(self):
+        self.names = set()
+        self.has_input = False
+
+    def visit_FunctionDef(self, node):
+        return
+
+    visit_AsyncFunctionDef = visit_FunctionDef
+
+    def visit_Call(self, node):
+        if isinstance(node.func, _ast.Name):
+            if node.func.id == "input":
+                self.has_input = True
+            else:
+                self.names.add(node.func.id)
+        elif isinstance(node.func, _ast.Attribute):
+            self.names.add(node.func.attr)
+        self.generic_visit(node)
+
+async def _run_python_with_input(source):
+    tree = _ast.parse(source)
+    functions = [node for node in _ast.walk(tree)
+                 if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
+    async_functions = set()
+    calls_by_function = {}
+    for function in functions:
+        calls = _FunctionCalls()
+        for statement in function.body:
+            calls.visit(statement)
+        calls_by_function[function.name] = calls
+        if calls.has_input:
+            async_functions.add(function.name)
+    changed = True
+    while changed:
+        changed = False
+        for name, calls in calls_by_function.items():
+            if name not in async_functions and calls.names & async_functions:
+                async_functions.add(name)
+                changed = True
+    tree = _InputTransformer(async_functions).visit(tree)
+    _ast.fix_missing_locations(tree)
+    compiled = compile(tree, "<exec>", "exec", flags=_ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
+    result = eval(compiled, globals(), globals())
+    if result is not None:
+        await result
+`;
+
+        const defaultScript = `# Offline Python 3 standard library
+import math
+import json
+from datetime import datetime
+
+def fibonacci_primes(count):
+    def is_prime(n):
+        if n < 2: return False
+        return all(n % i != 0 for i in range(2, int(math.isqrt(n)) + 1))
+
+    fibs, a, b = [], 0, 1
+    while len(fibs) < count:
+        if is_prime(a):
+            fibs.append(a)
+        a, b = b, a + b
+    return fibs
+
+results = {
+    "engine": "CPython WASM (Local)",
+    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    "primes": fibonacci_primes(6)
+}
+
+print(json.dumps(results, indent=2))
+`;
+
+        // Support Tab key (4 spaces) & Ctrl+Enter to run
+        editor.addEventListener('keydown', (e) => {
+            const pairs = { '(': ')', '[': ']', '{': '}', '"': '"', "'": "'" };
+            const closingCharacters = new Set(Object.values(pairs));
+
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = editor.selectionStart;
+                const end = editor.selectionEnd;
+                editor.value = editor.value.substring(0, start) + "    " + editor.value.substring(end);
+                editor.selectionStart = editor.selectionEnd = start + 4;
+                updateHighlight();
+                updateCursorPosition();
+            } else if (e.key === 'Backspace' && editor.selectionStart === editor.selectionEnd) {
+                const cursor = editor.selectionStart;
+                const before = editor.value[cursor - 1];
+                const after = editor.value[cursor];
+                if (pairs[before] === after) {
+                    e.preventDefault();
+                    editor.setRangeText('', cursor - 1, cursor + 1, 'start');
+                    updateHighlight();
+                    updateCursorPosition();
+                }
+            } else if (closingCharacters.has(e.key) && editor.value[editor.selectionStart] === e.key &&
+                editor.selectionStart === editor.selectionEnd) {
+                e.preventDefault();
+                editor.selectionStart = editor.selectionEnd = editor.selectionStart + 1;
+                updateCursorPosition();
+            } else if (Object.hasOwn(pairs, e.key)) {
+                e.preventDefault();
+                const start = editor.selectionStart;
+                const end = editor.selectionEnd;
+                const selectedText = editor.value.slice(start, end);
+                const insertedText = e.key + selectedText + pairs[e.key];
+                editor.setRangeText(insertedText, start, end, 'select');
+                const cursor = start + 1 + selectedText.length;
+                editor.selectionStart = editor.selectionEnd = cursor;
+                updateHighlight();
+                updateCursorPosition();
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                if (!runBtn.disabled) runPython();
+            }
+        });
+
+        editor.addEventListener('input', updateHighlight);
+        editor.addEventListener('scroll', syncEditorScroll);
+        editor.addEventListener('click', updateCursorPosition);
+        editor.addEventListener('keyup', updateCursorPosition);
+        editor.addEventListener('select', updateCursorPosition);
+
+        function appendOutput(text, type = 'stdout') {
+            const span = document.createElement('span');
+            span.className = `term-${type}`;
+            span.textContent = text;
+            terminal.appendChild(span);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        // Initialize local Pyodide engine
+        async function bootPythonEngine() {
+            try {
+                // indexURL explicitly points to the local pyodide subfolder
+                pyodide = await loadPyodide({
+                    indexURL: "./pyodide/",
+                    stdout: (text) => appendOutput(text + '\n', 'stdout'),
+                    stderr: (text) => appendOutput(text + '\n', 'stderr')
+                });
+                pyodide.globals.set('_runner_input_js', (prompt) => requestInput(String(prompt || '')));
+                await pyodide.runPythonAsync(`
+async def _runner_input(prompt=""):
+    return await _runner_input_js(prompt)
+`);
+                await pyodide.runPythonAsync(pythonInputSupport);
+
+                statusDot.className = 'status-dot ready';
+                statusText.textContent = 'Engine Ready';
+                runBtn.disabled = false;
+                downloadFileBtn.disabled = false;
+                appendOutput('[Ready] Python 3 WASM initialized completely offline.\n', 'info');
+            } catch (err) {
+                statusDot.className = 'status-dot error';
+                statusText.textContent = 'Boot Failed';
+                appendOutput(`[Error] Failed to initialize Pyodide: ${err.message}\nMake sure runner.html and the complete ./pyodide/ folder are included in the deployed site.\n`, 'stderr');
+            }
+        }
+
+        // Run Code
+        async function runPython() {
+            const code = editor.value;
+            runBtn.disabled = true;
+
+            appendOutput('\n--- Executing Script ---\n', 'info');
+
+            try {
+                pyodide.globals.set('_runner_source', code);
+                await pyodide.runPythonAsync('await _run_python_with_input(_runner_source)');
+            } catch (err) {
+                appendOutput(err.message + '\n', 'stderr');
+            } finally {
+                pyodide.globals.delete('_runner_source');
+                runBtn.disabled = false;
+            }
+        }
+
+        function requestInput(prompt) {
+            inputPrompt.textContent = prompt || 'Input';
+            inputValue.value = '';
+            inputDialog.hidden = false;
+            inputValue.focus();
+            return new Promise((resolve) => {
+                resolveInput = resolve;
+            });
+        }
+
+        function finishInput(value) {
+            inputDialog.hidden = true;
+            if (resolveInput) {
+                resolveInput(value);
+                resolveInput = null;
+            }
+        }
+
+        inputForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            finishInput(inputValue.value);
+        });
+
+        cancelInputBtn.addEventListener('click', () => finishInput(''));
+
+        clearBtn.addEventListener('click', () => {
+            terminal.innerHTML = '';
+        });
+
+        uploadFilesBtn.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', async () => {
+            for (const file of fileInput.files) {
+                try {
+                    pyodide.FS.writeFile(file.name, new Uint8Array(await file.arrayBuffer()));
+                    appendOutput(`[File] Uploaded ${file.name}\n`, 'info');
+                } catch (err) {
+                    appendOutput(`[Error] Could not upload ${file.name}: ${err.message}\n`, 'stderr');
+                }
+            }
+            fileInput.value = '';
+        });
+
+        downloadFileBtn.addEventListener('click', () => {
+            const filename = downloadFilename.value.trim();
+            if (!filename) {
+                appendOutput('[Error] Enter a filename to download.\n', 'stderr');
+                downloadFilename.focus();
+                return;
+            }
+
+            try {
+                const contents = pyodide.FS.readFile(filename);
+                const blob = new Blob([contents], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                const basename = filename.split('/').pop();
+                link.download = `${basename.replace(/\.[^.]+$/, '')}.py`;
+                link.click();
+                window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } catch (err) {
+                appendOutput(`[Error] Could not download ${filename}: ${err.message}\n`, 'stderr');
+            }
+        });
+
+        resetSnippetBtn.addEventListener('click', () => {
+            editor.value = defaultScript;
+            updateHighlight();
+            syncEditorScroll();
+        });
+
+        runBtn.addEventListener('click', runPython);
+
+        editor.value = '';
+        updateHighlight();
+
+        bootPythonEngine();
+    </script>
+</body>
+</html>
