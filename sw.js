@@ -1,22 +1,61 @@
-const CACHE_NAME = 'pwa-cache-v1';
-// Use relative paths to stay inside your GitHub Pages subfolder
-const ASSETS = [
+const CACHE_NAME = 'screen-recorder-chromebook-v2';
+const APP_FILES = [
+  '',
+  'index.html',
+  'runner.html',
   'screenrecorder.html',
-  'manifest.json'
+  'flattener.html',
+  'inspector.html',
+  'manifest.json',
+  'icon-512.png',
+  'pwa.js',
+  'sw.js',
+  'vendor/marked.min.js',
+  'vendor/jspdf.umd.min.js',
+  'pyodide/pyodide.js',
+  'pyodide/pyodide.asm.js',
+  'pyodide/pyodide.asm.wasm',
+  'pyodide/pyodide-lock.json',
+  'pyodide/python_stdlib.zip'
 ];
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
-  );
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const files = APP_FILES.map((file) => new URL(file, self.registration.scope));
+    await cache.addAll(files);
+    await self.skipWaiting();
+  })());
 });
 
-self.addEventListener('fetch', (e) => {
-  e.respondWith(
-    caches.match(e.request).then((response) => {
-      return response || fetch(e.request);
-    })
-  );
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    const oldCaches = await caches.keys();
+    await Promise.all(oldCaches
+      .filter((name) => name === 'pwa-cache-v1' || (
+        name.startsWith('screen-recorder-chromebook-') && name !== CACHE_NAME
+      ))
+      .map((name) => caches.delete(name)));
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  const requestUrl = new URL(request.url);
+  if (request.method !== 'GET' || requestUrl.origin !== self.location.origin ||
+      !requestUrl.href.startsWith(self.registration.scope)) return;
+
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) return cachedResponse;
+
+    if (request.mode === 'navigate') {
+      const offlinePage = await cache.match(new URL('index.html', self.registration.scope));
+      if (offlinePage) return offlinePage;
+    }
+
+    return fetch(request);
+  })());
 });
