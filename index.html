@@ -88,8 +88,20 @@
             outline-offset: 3px;
         }
 
+        .tool-placeholder {
+            color: #aab5cd;
+            border-style: dashed;
+            background: rgba(22, 32, 57, 0.4);
+            cursor: default;
+        }
+
         .tool-name { font-weight: 650; }
         .arrow { color: #93b4ff; font-size: 1.2rem; }
+        .placeholder-label {
+            color: #93b4ff;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
 
         @media (max-width: 520px) {
             body { padding: 36px 18px; }
@@ -108,6 +120,9 @@
             <a class="tool-link" href="screenrecorder.html"><span class="tool-name">Screen Recorder</span><span class="arrow" aria-hidden="true">→</span></a>
             <a class="tool-link" href="flattener.html"><span class="tool-name">Picture Flattener</span><span class="arrow" aria-hidden="true">→</span></a>
             <a class="tool-link" href="inspector.html"><span class="tool-name">Inspector</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="player.html"><span class="tool-name">Audio Studio & Player</span><span class="arrow" aria-hidden="true">→</span></a>
+            <div class="tool-link tool-placeholder" aria-label="Reserved for a future tool"><span class="placeholder-label">Coming soon</span></div>
+            <div class="tool-link tool-placeholder" aria-label="Reserved for a future tool"><span class="placeholder-label">Coming soon</span></div>
         </nav>
     </main>
 </body>

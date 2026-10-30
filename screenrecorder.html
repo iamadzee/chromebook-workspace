@@ -9,19 +9,19 @@
     <style>
         body {
             margin: 0;
+            padding: 64px 16px 24px;
             background-color: #111;
             color: white;
             font-family: sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             min-height: 100vh;
-            overflow: hidden;
+            gap: 16px;
+            box-sizing: border-box;
         }
         #controls {
-            position: absolute;
-            top: 20px;
             z-index: 10;
             background: rgba(0, 0, 0, 0.8);
             padding: 15px 25px;
@@ -29,8 +29,11 @@
             display: flex;
             align-items: center;
             flex-wrap: wrap;
+            justify-content: center;
             gap: 15px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            width: min(100%, 1100px);
+            box-sizing: border-box;
         }
         input, select {
             padding: 10px;
@@ -50,23 +53,137 @@
         }
         #startButton { background-color: #28a745; }
         #startButton:hover { background-color: #218838; }
+        #pauseButton { background-color: #d97706; display: none; }
+        #pauseButton:hover { background-color: #b45309; }
         #stopButton { background-color: #dc3545; display: none; }
         #stopButton:hover { background-color: #c82333; }
         #backToHub {
-            top:10px;
-            left:0;
-            position: absolute;
+            top: 16px;
+            left: 16px;
+            position: fixed;
             color: gray;
             text-decoration: none;
             font-size: 0.9rem;
             font-weight: 500;
             transition: color 0.2s;
         }
-        #backtoHub:hover { background: white; }
+        #backToHub:hover { color: white; }
+        #recordingStatus {
+            min-width: 150px;
+            color: #d1d5db;
+            font-size: 14px;
+            text-align: center;
+        }
+        #recordingTimer {
+            color: #fca5a5;
+            font-family: monospace;
+            font-size: 1.1rem;
+            font-variant-numeric: tabular-nums;
+        }
+        #previewPanel {
+            display: none;
+            width: min(100%, 1100px);
+            background: #080808;
+            border: 1px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #previewVideo {
+            display: block;
+            width: 100%;
+            max-height: min(70vh, 760px);
+            object-fit: contain;
+            background: #000;
+        }
+        #previewCaption {
+            padding: 10px 14px;
+            color: #d1d5db;
+            font-size: 0.85rem;
+        }
+        .editor-panel {
+            width: min(100%, 1100px);
+            padding: 20px;
+            background: #191919;
+            border: 1px solid #333;
+            border-radius: 10px;
+            box-sizing: border-box;
+        }
+        .page-intro {
+            width: min(100%, 1100px);
+            margin: 0 auto;
+            text-align: center;
+        }
+        .page-intro h1 {
+            margin: 0;
+            font-size: clamp(1.6rem, 4vw, 2.2rem);
+        }
+        .page-intro p {
+            margin: 8px 0 0;
+            color: #aab5cd;
+            line-height: 1.5;
+        }
+        .editor-panel h1 {
+            margin: 0 0 8px;
+            font-size: 1.4rem;
+        }
+        .editor-description,
+        .editor-hint {
+            color: #c4c4c4;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+        .editor-description { margin: 0 0 16px; }
+        .editor-hint { margin: 12px 0 0; }
+        .editor-preview {
+            display: block;
+            width: 100%;
+            max-height: min(65vh, 680px);
+            margin-bottom: 16px;
+            background: #000;
+            object-fit: contain;
+        }
+        .editor-actions {
+            display: flex;
+            align-items: end;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .editor-field {
+            display: flex;
+            flex: 1 1 140px;
+            flex-direction: column;
+            gap: 6px;
+            color: #e5e5e5;
+            font-size: 0.85rem;
+        }
+        .editor-field input,
+        .editor-field select {
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .editor-mark {
+            background: #334155;
+        }
+        .editor-mark:hover { background: #475569; }
+        #previewEditButton,
+        #exportEditButton { background: #2563eb; }
+        #previewEditButton:hover,
+        #exportEditButton:hover { background: #1d4ed8; }
+        #cancelEditButton { background: #dc3545; }
+        #cancelEditButton:hover { background: #c82333; }
+        #editorStatus {
+            min-height: 1.4em;
+            margin: 14px 0 0;
+            color: #bfdbfe;
+            font-size: 0.9rem;
+        }
+        button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible {
+            outline: 3px solid #93c5fd;
+            outline-offset: 2px;
+        }
         @media (max-width: 600px) {
+            body { padding: 58px 10px 16px; }
             #controls {
-                left: 10px;
-                right: 10px;
                 padding: 12px;
                 gap: 8px;
             }
@@ -74,12 +191,20 @@
                 box-sizing: border-box;
                 max-width: 100%;
             }
+            #recordingStatus { width: 100%; }
+            #backToHub { top: 12px; left: 12px; }
         }
     </style>
+    <link rel="stylesheet" href="./tool-theme.css">
 </head>
 <body>
 
     <a id="backToHub" href="index.html">← Back to Hub</a>
+
+    <div class="page-intro">
+        <h1>Screen Recorder</h1>
+        <p>Capture your screen, then trim a video below.</p>
+    </div>
 
     <div id="controls">
         <label for="fileName">File name</label>
@@ -90,17 +215,85 @@
             <option value="mp4">MP4</option>
         </select>
         <button id="startButton">1. Select & Start Recording</button>
+        <button id="pauseButton" type="button" aria-pressed="false">Pause</button>
         <button id="stopButton">2. Stop & Save Video</button>
+        <span id="recordingStatus" role="status" aria-live="polite">Ready to record</span>
+        <span id="recordingTimer" aria-label="Recording time">00:00</span>
     </div>
+
+    <section id="previewPanel" aria-label="Screen recording preview">
+        <video id="previewVideo" autoplay muted playsinline></video>
+        <div id="previewCaption">Your shared screen preview will appear here while recording.</div>
+    </section>
+
+    <section class="editor-panel" aria-labelledby="editorTitle">
+        <h1 id="editorTitle">Basic Video Editor</h1>
+        <p class="editor-description">Load a video, set the section you want to keep, preview it, and export a trimmed copy. Your original file is not changed. Editing happens in this browser.</p>
+        <label class="editor-field" for="editorFile">
+            Choose a video
+            <input id="editorFile" type="file" accept="video/*">
+        </label>
+        <video id="editorVideo" class="editor-preview" controls playsinline preload="metadata" hidden></video>
+        <div class="editor-actions">
+            <label class="editor-field" for="trimStart">Start (seconds)
+                <input id="trimStart" type="number" min="0" step="0.1" value="0" disabled>
+            </label>
+            <button class="editor-mark" id="markStartButton" type="button" disabled>Set start to current time</button>
+            <label class="editor-field" for="trimEnd">End (seconds)
+                <input id="trimEnd" type="number" min="0" step="0.1" value="0" disabled>
+            </label>
+            <button class="editor-mark" id="markEndButton" type="button" disabled>Set end to current time</button>
+            <label class="editor-field" for="editorFormat">Export format
+                <select id="editorFormat" disabled>
+                    <option value="webm">WebM</option>
+                    <option value="mp4">MP4</option>
+                </select>
+            </label>
+            <label class="editor-field" for="editorFileName">Output name
+                <input id="editorFileName" type="text" maxlength="100" value="trimmed-video" disabled>
+            </label>
+            <button id="previewEditButton" type="button" disabled>Preview selection</button>
+            <button id="exportEditButton" type="button" disabled>Export trimmed video</button>
+            <button id="cancelEditButton" type="button" hidden>Cancel export</button>
+        </div>
+        <p class="editor-hint">The editor records the selected playback section into a new video, so exports take about as long as the selected section. Export support depends on your browser.</p>
+        <p id="editorStatus" role="status" aria-live="polite">Choose a video to begin editing.</p>
+    </section>
 
     <script>
         const startButton = document.getElementById('startButton');
+        const pauseButton = document.getElementById('pauseButton');
         const stopButton = document.getElementById('stopButton');
         const fileNameInput = document.getElementById('fileName');
         const fileExtensionInput = document.getElementById('fileExtension');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const recordingTimer = document.getElementById('recordingTimer');
+        const previewPanel = document.getElementById('previewPanel');
+        const previewVideo = document.getElementById('previewVideo');
+        const previewCaption = document.getElementById('previewCaption');
+        const editorFile = document.getElementById('editorFile');
+        const editorVideo = document.getElementById('editorVideo');
+        const trimStartInput = document.getElementById('trimStart');
+        const trimEndInput = document.getElementById('trimEnd');
+        const markStartButton = document.getElementById('markStartButton');
+        const markEndButton = document.getElementById('markEndButton');
+        const editorFormat = document.getElementById('editorFormat');
+        const editorFileName = document.getElementById('editorFileName');
+        const previewEditButton = document.getElementById('previewEditButton');
+        const exportEditButton = document.getElementById('exportEditButton');
+        const cancelEditButton = document.getElementById('cancelEditButton');
+        const editorStatus = document.getElementById('editorStatus');
         let mediaRecorder;
         let mediaStream;
         let recordedChunks = [];
+        let recordingElapsedMs = 0;
+        let recordingStartedAt = 0;
+        let timerInterval = null;
+        let editorObjectUrl = null;
+        let editorReady = false;
+        let editorExportSupported = false;
+        let isPreviewingSelection = false;
+        let activeEditorExport = null;
 
         function getSupportedMimeType(extension) {
             const candidates = extension === 'mp4'
@@ -114,6 +307,308 @@
                 mediaStream.getTracks().forEach(track => track.stop());
                 mediaStream = null;
             }
+            previewVideo.srcObject = null;
+        }
+
+        function formatDuration(milliseconds) {
+            const totalSeconds = Math.floor(milliseconds / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            const clock = [minutes, seconds].map(value => String(value).padStart(2, '0')).join(':');
+            return hours ? `${String(hours).padStart(2, '0')}:${clock}` : clock;
+        }
+
+        function getElapsedRecordingTime() {
+            return recordingElapsedMs + (
+                mediaRecorder && mediaRecorder.state === 'recording'
+                    ? performance.now() - recordingStartedAt
+                    : 0
+            );
+        }
+
+        function updateRecordingTimer() {
+            recordingTimer.textContent = formatDuration(getElapsedRecordingTime());
+        }
+
+        function stopRecording() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+            if (mediaRecorder.state === 'recording') {
+                recordingElapsedMs += performance.now() - recordingStartedAt;
+                recordingStartedAt = 0;
+            }
+            mediaRecorder.stop();
+        }
+
+        function resetRecordingControls() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            recordingElapsedMs = 0;
+            recordingStartedAt = 0;
+            updateRecordingTimer();
+            pauseButton.style.display = 'none';
+            pauseButton.disabled = true;
+            pauseButton.textContent = 'Pause';
+            pauseButton.setAttribute('aria-pressed', 'false');
+            stopButton.style.display = 'none';
+            stopButton.disabled = false;
+            startButton.style.display = 'inline-block';
+            fileExtensionInput.disabled = false;
+            fileNameInput.disabled = false;
+            previewCaption.textContent = 'Your shared screen preview will appear here while recording.';
+            previewPanel.style.display = 'none';
+            recordingStatus.textContent = 'Ready to record';
+        }
+
+        function setEditorBusy(isBusy) {
+            editorFile.disabled = isBusy;
+            trimStartInput.disabled = isBusy || !editorReady;
+            trimEndInput.disabled = isBusy || !editorReady;
+            markStartButton.disabled = isBusy || !editorReady;
+            markEndButton.disabled = isBusy || !editorReady;
+            editorFormat.disabled = isBusy || !editorReady || !editorExportSupported;
+            editorFileName.disabled = isBusy || !editorReady;
+            previewEditButton.disabled = isBusy || !editorReady;
+            exportEditButton.disabled = isBusy || !editorReady || !editorExportSupported;
+            cancelEditButton.hidden = !isBusy;
+        }
+
+        function getTrimRange() {
+            if (!trimStartInput.value.trim() || !trimEndInput.value.trim()) {
+                throw new Error('Enter both a start and end time.');
+            }
+            const start = Number(trimStartInput.value);
+            const end = Number(trimEndInput.value);
+            if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end > editorVideo.duration || start >= end) {
+                throw new Error('Choose a start and end within the video, with start before end.');
+            }
+            return { start, end };
+        }
+
+        function seekEditorVideo(time) {
+            if (Math.abs(editorVideo.currentTime - time) < 0.01) return Promise.resolve();
+            return new Promise((resolve, reject) => {
+                const onSeeked = () => {
+                    editorVideo.removeEventListener('error', onError);
+                    resolve();
+                };
+                const onError = () => {
+                    editorVideo.removeEventListener('seeked', onSeeked);
+                    reject(new Error('Could not seek to the selected trim position.'));
+                };
+                editorVideo.addEventListener('seeked', onSeeked, { once: true });
+                editorVideo.addEventListener('error', onError, { once: true });
+                editorVideo.currentTime = time;
+            });
+        }
+
+        function stopEditorExport(task) {
+            if (activeEditorExport !== task) return;
+            task.canceled = true;
+            editorVideo.pause();
+            if (task.recorder.state !== 'inactive') task.recorder.stop();
+        }
+
+        editorFile.addEventListener('change', () => {
+            const file = editorFile.files && editorFile.files[0];
+            if (!file) return;
+            if (!file.type.startsWith('video/')) {
+                editorStatus.textContent = 'Choose a video file to edit.';
+                editorFile.value = '';
+                return;
+            }
+
+            editorReady = false;
+            editorVideo.pause();
+            editorVideo.hidden = true;
+            editorVideo.removeAttribute('src');
+            editorVideo.load();
+            if (editorObjectUrl) URL.revokeObjectURL(editorObjectUrl);
+            editorObjectUrl = URL.createObjectURL(file);
+            editorVideo.src = editorObjectUrl;
+            editorFileName.value = file.name.replace(/\.[^.]+$/, '').slice(0, 100) || 'trimmed-video';
+            setEditorBusy(false);
+            editorStatus.textContent = `Loading ${file.name}…`;
+        });
+
+        editorVideo.addEventListener('loadedmetadata', () => {
+            if (!Number.isFinite(editorVideo.duration) || editorVideo.duration <= 0) {
+                editorStatus.textContent = 'This video does not have a usable duration.';
+                return;
+            }
+            editorReady = true;
+            editorVideo.hidden = false;
+            trimStartInput.max = editorVideo.duration.toFixed(2);
+            trimEndInput.max = editorVideo.duration.toFixed(2);
+            trimStartInput.value = '0';
+            trimEndInput.value = editorVideo.duration.toFixed(2);
+            setEditorBusy(false);
+            editorStatus.textContent = `Loaded ${editorFile.files[0].name} (${formatDuration(editorVideo.duration * 1000)}).`;
+        });
+
+        editorVideo.addEventListener('error', () => {
+            if (!editorFile.files || !editorFile.files[0]) return;
+            editorReady = false;
+            setEditorBusy(false);
+            editorStatus.textContent = 'Could not load this video. Try a different file format.';
+        });
+
+        markStartButton.addEventListener('click', () => {
+            trimStartInput.value = editorVideo.currentTime.toFixed(2);
+        });
+
+        markEndButton.addEventListener('click', () => {
+            trimEndInput.value = editorVideo.currentTime.toFixed(2);
+        });
+
+        previewEditButton.addEventListener('click', async () => {
+            try {
+                const { start } = getTrimRange();
+                isPreviewingSelection = false;
+                editorVideo.pause();
+                await seekEditorVideo(start);
+                isPreviewingSelection = true;
+                await editorVideo.play();
+                editorStatus.textContent = 'Previewing the selected section.';
+            } catch (error) {
+                isPreviewingSelection = false;
+                editorStatus.textContent = `Could not preview selection: ${error.message}`;
+            }
+        });
+
+        editorVideo.addEventListener('timeupdate', () => {
+            if (!isPreviewingSelection) return;
+            const end = Number(trimEndInput.value);
+            if (Number.isFinite(end) && editorVideo.currentTime >= end) {
+                isPreviewingSelection = false;
+                editorVideo.pause();
+            }
+        });
+
+        exportEditButton.addEventListener('click', async () => {
+            if (!editorReady || activeEditorExport) return;
+
+            let range;
+            try {
+                range = getTrimRange();
+            } catch (error) {
+                editorStatus.textContent = error.message;
+                return;
+            }
+
+            const captureVideo = editorVideo.captureStream || editorVideo.mozCaptureStream;
+            if (!captureVideo || typeof MediaRecorder === 'undefined') {
+                editorStatus.textContent = 'This browser cannot export a trimmed video. Try an up-to-date Chrome browser.';
+                return;
+            }
+
+            const mimeType = getSupportedMimeType(editorFormat.value);
+            if (!mimeType) {
+                editorStatus.textContent = `${editorFormat.value.toUpperCase()} export is not supported by this browser. Choose another format.`;
+                return;
+            }
+
+            let stream;
+            let recorder;
+            let task;
+            try {
+                isPreviewingSelection = false;
+                editorVideo.pause();
+                await seekEditorVideo(range.start);
+                stream = captureVideo.call(editorVideo);
+                if (stream.getVideoTracks().length === 0) {
+                    throw new Error('The browser did not provide a video track for export.');
+                }
+                recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 });
+                task = { recorder, canceled: false };
+                activeEditorExport = task;
+                setEditorBusy(true);
+                editorStatus.textContent = 'Exporting trimmed video…';
+
+                let recorderFailure = null;
+                const recordingFinished = new Promise((resolve, reject) => {
+                    const chunks = [];
+                    recorder.ondataavailable = event => {
+                        if (event.data.size > 0) chunks.push(event.data);
+                    };
+                    recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+                    recorder.onerror = event => {
+                        recorderFailure = event.error || new Error('The browser recorder failed.');
+                        if (recorder.state !== 'inactive') recorder.stop();
+                        reject(recorderFailure);
+                    };
+                });
+
+                recorder.start(250);
+                try {
+                    await editorVideo.play();
+                    while (
+                        activeEditorExport === task &&
+                        !task.canceled &&
+                        !recorderFailure &&
+                        recorder.state === 'recording' &&
+                        !editorVideo.ended &&
+                        editorVideo.currentTime < range.end
+                    ) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                    editorVideo.pause();
+                    if (recorder.state !== 'inactive') recorder.stop();
+                    const blob = await recordingFinished;
+                    if (task.canceled) {
+                        editorStatus.textContent = 'Export canceled.';
+                    } else if (blob.size === 0) {
+                        editorStatus.textContent = 'The export produced an empty video. Try a different source file or format.';
+                    } else {
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        const safeName = editorFileName.value.trim()
+                            .replace(/[\\/:*?"<>|]/g, '_') || 'trimmed-video';
+                        const extension = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+                        link.href = url;
+                        link.download = `${safeName}.${extension}`;
+                        link.click();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                        editorStatus.textContent = `Trimmed video exported as ${link.download}.`;
+                    }
+                } catch (error) {
+                    if (recorder.state !== 'inactive') recorder.stop();
+                    await recordingFinished.catch(() => {});
+                    throw error;
+                }
+            } catch (error) {
+                editorStatus.textContent = `Could not export trimmed video: ${error.message}`;
+            } finally {
+                editorVideo.pause();
+                if (stream) stream.getTracks().forEach(track => track.stop());
+                if (activeEditorExport === task) activeEditorExport = null;
+                setEditorBusy(false);
+            }
+        });
+
+        cancelEditButton.addEventListener('click', () => {
+            if (activeEditorExport) stopEditorExport(activeEditorExport);
+        });
+
+        if (typeof MediaRecorder === 'undefined') {
+            editorFormat.disabled = true;
+            editorStatus.textContent = 'Video export is not supported by this browser.';
+        } else {
+            for (const option of editorFormat.options) {
+                option.disabled = !getSupportedMimeType(option.value);
+            }
+            editorExportSupported = Boolean(
+                (HTMLVideoElement.prototype.captureStream || HTMLVideoElement.prototype.mozCaptureStream) &&
+                Array.from(editorFormat.options).some(option => !option.disabled)
+            );
+            if (editorFormat.selectedOptions[0].disabled) {
+                const supportedOption = Array.from(editorFormat.options).find(option => !option.disabled);
+                if (supportedOption) editorFormat.value = supportedOption.value;
+            }
+            if (!editorExportSupported) {
+                editorFormat.disabled = true;
+                editorStatus.textContent = 'This browser does not support exporting video from a player.';
+            }
         }
 
         startButton.addEventListener('click', async () => {
@@ -125,6 +620,7 @@
             }
 
             try {
+                recordingStatus.textContent = 'Choose a screen or window to share…';
                 mediaStream = await navigator.mediaDevices.getDisplayMedia({
                     video: { frameRate: { ideal: 30, max: 60 } },
                     audio: true
@@ -135,11 +631,21 @@
                     videoBitsPerSecond: 2500000
                 });
 
+                previewVideo.srcObject = mediaStream;
+                previewPanel.style.display = 'block';
+                previewVideo.play().catch(error => {
+                    recordingStatus.textContent = `Recording, but the live preview could not start: ${error.message}`;
+                });
+                previewCaption.textContent = 'Live preview is muted to prevent feedback. Audio is still included when the browser shares it.';
+
                 mediaRecorder.ondataavailable = event => {
                     if (event.data.size > 0) recordedChunks.push(event.data);
                 };
 
                 mediaRecorder.onstop = () => {
+                    updateRecordingTimer();
+                    const finalElapsedTime = recordingTimer.textContent;
+                    let finalStatus;
                     if (recordedChunks.length) {
                         const blob = new Blob(recordedChunks, { type: mimeType });
                         const url = URL.createObjectURL(blob);
@@ -150,32 +656,76 @@
                         link.download = `${safeName}.${extension}`;
                         link.click();
                         setTimeout(() => URL.revokeObjectURL(url), 1000);
+                        finalStatus = `Recording saved as ${link.download}.`;
+                    } else {
+                        finalStatus = 'Recording ended without any video data to save.';
                     }
                     recordedChunks = [];
                     stopTracks();
-                    startButton.style.display = 'inline-block';
-                    stopButton.style.display = 'none';
+                    resetRecordingControls();
+                    recordingTimer.textContent = finalElapsedTime;
+                    recordingStatus.textContent = finalStatus;
+                };
+
+                mediaRecorder.onerror = event => {
+                    console.error('Recording error:', event.error);
+                    recordingStatus.textContent = `Recording failed: ${event.error ? event.error.message : 'unknown recorder error'}`;
+                    stopRecording();
                 };
 
                 const videoTrack = mediaStream.getVideoTracks()[0];
                 if (videoTrack) {
                     videoTrack.addEventListener('ended', () => {
-                        if (mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+                        stopRecording();
                     }, { once: true });
                 }
 
                 mediaRecorder.start(5000);
                 startButton.style.display = 'none';
+                pauseButton.style.display = 'inline-block';
+                pauseButton.disabled = false;
                 stopButton.style.display = 'inline-block';
+                fileExtensionInput.disabled = true;
+                fileNameInput.disabled = true;
+                recordingElapsedMs = 0;
+                recordingStartedAt = performance.now();
+                timerInterval = setInterval(updateRecordingTimer, 250);
+                recordingStatus.textContent = 'Recording your screen';
             } catch (error) {
                 console.error('Recording error:', error);
                 stopTracks();
-                alert('Failed to start recording. Check sharing permissions and try a supported format.');
+                resetRecordingControls();
+                recordingStatus.textContent = `Could not start recording: ${error.message}`;
             }
         });
 
+        pauseButton.addEventListener('click', () => {
+            if (!mediaRecorder) return;
+            if (mediaRecorder.state === 'recording') {
+                recordingElapsedMs += performance.now() - recordingStartedAt;
+                mediaRecorder.pause();
+                pauseButton.textContent = 'Resume';
+                pauseButton.setAttribute('aria-pressed', 'true');
+                recordingStatus.textContent = 'Recording paused';
+            } else if (mediaRecorder.state === 'paused') {
+                mediaRecorder.resume();
+                recordingStartedAt = performance.now();
+                pauseButton.textContent = 'Pause';
+                pauseButton.setAttribute('aria-pressed', 'false');
+                recordingStatus.textContent = 'Recording your screen';
+            } else {
+                recordingStatus.textContent = 'Recording is no longer active.';
+            }
+            updateRecordingTimer();
+        });
+
         stopButton.addEventListener('click', () => {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                recordingStatus.textContent = 'Finishing and saving recording…';
+                pauseButton.disabled = true;
+                stopButton.disabled = true;
+                stopRecording();
+            }
         });
 
     </script>
