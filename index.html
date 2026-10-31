@@ -140,6 +140,12 @@
             outline-offset: 3px;
         }
 
+        .tools > .tool-link:last-child {
+            grid-column: 1 / -1;
+            width: calc((100% - 12px) / 2);
+            justify-self: center;
+        }
+
         .tool-placeholder {
             color: var(--text-muted);
             border-style: dashed;
@@ -158,6 +164,7 @@
         @media (max-width: 520px) {
             body { padding: 36px 18px; }
             .tools { grid-template-columns: 1fr; }
+            .tools > .tool-link:last-child { width: 100%; }
         }
     </style>
 </head>
@@ -174,6 +181,7 @@
             <a class="tool-link" href="editor.html"><span class="tool-name">Config & Binary File Editor</span><span class="arrow" aria-hidden="true">→</span></a>
             <a class="tool-link" href="screenrecorder.html"><span class="tool-name">Screen Recorder & Video Trimmer</span><span class="arrow" aria-hidden="true">→</span></a>
             <a class="tool-link" href="flattener.html"><span class="tool-name">Offline Document OCR & Searchable PDF</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="pdf-editor.html"><span class="tool-name">PDF Document Editor</span><span class="arrow" aria-hidden="true">→</span></a>
             <a class="tool-link" href="inspector.html"><span class="tool-name">Markdown Text Editor</span><span class="arrow" aria-hidden="true">→</span></a>
             <a class="tool-link" href="player.html"><span class="tool-name">Audio Player & Sound Booster</span><span class="arrow" aria-hidden="true">→</span></a>
             <a class="tool-link" href="deck.html"><span class="tool-name">YouTube Study Deck</span><span class="arrow" aria-hidden="true">→</span></a>

@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Edit PDF page order and add movable text, images, shapes, and freehand markup offline.">
+    <link rel="manifest" href="./manifest.json">
+    <script src="./theme.js"></script>
+    <script src="./pwa.js" defer></script>
+    <script src="./vendor/pdfjs/pdf.min.js"></script>
+    <script src="./vendor/pdf-lib/pdf-lib.min.js"></script>
+    <link rel="stylesheet" href="./tool-theme.css">
+    <title>PDF Document Editor</title>
+    <style>
+        :root {
+            --accent-green: #197c61;
+            --accent-red: #b94b43;
+            --workspace: #111a28;
+            --paper: #fff;
+            --stage-shadow: 0 16px 38px rgba(20, 33, 48, .2);
+        }
+
+        :root[data-theme="light"] {
+            --workspace: #e3e7ec;
+            --paper: #fff;
+        }
+
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; margin: 0; }
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            min-height: 58px;
+            padding: 10px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .back-link { text-decoration: none; }
+        h1 { margin: 0; font-size: 1.05rem; }
+        .doc-status { max-width: 35vw; overflow: hidden; color: var(--text-dim); text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+        .toolbar {
+            position: sticky;
+            top: 58px;
+            z-index: 19;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 16px;
+        }
+        .toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+        button, select, input, textarea { font: inherit; }
+        button {
+            min-height: 34px;
+            padding: 6px 10px;
+            color: var(--text-main);
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button:hover:not(:disabled) { border-color: var(--accent-blue); }
+        button:disabled { opacity: .42; cursor: not-allowed; }
+        button.primary { color: #fff; background: #197c61; border-color: #197c61; }
+        button.danger { color: #a63d38; }
+        button.active { color: #fff; background: #315eb8; border-color: #315eb8; }
+        .icon-button { min-width: 34px; padding-inline: 8px; }
+        .toolbar-separator { height: 24px; border-left: 1px solid var(--border-color); margin: 0 3px; }
+        .toolbar label { color: var(--text-dim); font-size: .78rem; }
+        .toolbar select { min-height: 34px; padding: 5px 8px; }
+        main { width: 100%; max-width: none; padding: 0; }
+        .workspace {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr) 250px;
+            min-height: calc(100vh - 111px);
+        }
+        .page-rail, .inspector {
+            min-width: 0;
+            padding: 14px;
+            background: var(--panel-bg);
+        }
+        .page-rail { border-right: 1px solid var(--border-color); }
+        .inspector { border-left: 1px solid var(--border-color); }
+        .rail-heading, .inspector-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0 0 12px;
+            color: var(--text-dim);
+            font-size: .73rem;
+            font-weight: 750;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+        #pageList { display: grid; gap: 8px; }
+        .page-card {
+            width: 100%;
+            min-height: 66px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            text-align: left;
+        }
+        .page-card[aria-current="page"] { border-color: var(--accent-blue); box-shadow: inset 3px 0 var(--accent-blue); }
+        .page-card small { display: block; margin-top: 3px; color: var(--text-dim); }
+        .page-index { color: var(--accent-blue); font-variant-numeric: tabular-nums; font-weight: 750; }
+        .page-empty { padding: 16px 8px; color: var(--text-dim); font-size: .85rem; line-height: 1.5; }
+        .stage {
+            min-width: 0;
+            min-height: calc(100vh - 111px);
+            padding: 26px;
+            overflow: auto;
+            background-color: var(--workspace);
+            background-image: linear-gradient(45deg, rgba(125, 139, 154, .08) 25%, transparent 25%, transparent 75%, rgba(125, 139, 154, .08) 75%), linear-gradient(45deg, rgba(125, 139, 154, .08) 25%, transparent 25%, transparent 75%, rgba(125, 139, 154, .08) 75%);
+            background-position: 0 0, 8px 8px;
+            background-size: 16px 16px;
+        }
+        .welcome {
+            width: min(100%, 560px);
+            min-height: 360px;
+            margin: 8vh auto;
+            padding: 36px;
+            display: grid;
+            align-content: center;
+            justify-items: start;
+            gap: 14px;
+            color: var(--text-main);
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        .welcome h2 { margin: 0; font-size: 1.45rem; }
+        .welcome p { margin: 0; max-width: 440px; color: var(--text-dim); line-height: 1.55; }
+        .welcome-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        #pageSurface {
+            position: relative;
+            width: max-content;
+            max-width: 100%;
+            margin: 0 auto;
+            background: var(--paper);
+            box-shadow: var(--stage-shadow);
+            line-height: 0;
+        }
+        #pageCanvas { display: block; max-width: 100%; height: auto; }
+        #itemLayer, #inkCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #itemLayer { overflow: hidden; }
+        #inkCanvas { pointer-events: none; }
+        .page-item {
+            position: absolute;
+            min-width: 18px;
+            min-height: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            overflow: visible;
+            padding: 3px;
+            color: #17233c;
+            border: 1px solid transparent;
+            cursor: move;
+            line-height: 1.2;
+            user-select: none;
+            touch-action: none;
+        }
+        .page-item.selected { border-color: #315eb8; outline: 1px solid rgba(49, 94, 184, .35); }
+        .page-item.text-item { white-space: pre-wrap; overflow-wrap: anywhere; }
+        .page-item.image-item { padding: 0; }
+        .page-item.image-item img { width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+        .page-item.rect-item { background: rgba(49, 94, 184, .2); }
+        .resize-handle {
+            position: absolute;
+            right: -5px;
+            bottom: -5px;
+            width: 11px;
+            height: 11px;
+            padding: 0;
+            background: #fff;
+            border: 2px solid #315eb8;
+            border-radius: 50%;
+            cursor: nwse-resize;
+        }
+        .inspector-section { padding: 0 0 16px; margin: 0 0 16px; border-bottom: 1px solid var(--border-color); }
+        .field { display: grid; gap: 5px; margin: 10px 0; }
+        .field label { color: var(--text-dim); font-size: .76rem; }
+        .field input, .field textarea { width: 100%; min-width: 0; padding: 7px 8px; }
+        .field textarea { min-height: 68px; resize: vertical; }
+        .field input[type="color"] { height: 36px; padding: 3px; }
+        .field input[type="range"] { padding: 0; }
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .inspector-actions { display: flex; gap: 6px; }
+        .inspector-actions button { flex: 1; }
+        .muted-note { color: var(--text-dim); font-size: .75rem; line-height: 1.45; }
+        .page-controls { display: flex; gap: 5px; margin-top: 10px; }
+        .page-controls button { flex: 1; }
+        .page-controls button { min-width: 0; padding: 5px 3px; font-size: .7rem; white-space: normal; }
+        .hidden { display: none !important; }
+        #pdfInput, #imageInput, #mergeInput { display: none; }
+
+        @media (max-width: 1000px) {
+            .workspace { grid-template-columns: 175px minmax(0, 1fr); }
+            .inspector { grid-column: 1 / -1; border-top: 1px solid var(--border-color); border-left: 0; }
+            .inspector-content { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+            .inspector-section { margin: 0; }
+        }
+        @media (max-width: 650px) {
+            header { padding-inline: 12px; }
+            .doc-status { max-width: 38vw; }
+            .toolbar { position: static; align-items: flex-start; }
+            .toolbar-group { gap: 5px; }
+            .toolbar button { font-size: .78rem; }
+            .workspace { grid-template-columns: 1fr; }
+            .page-rail { border-right: 0; border-bottom: 1px solid var(--border-color); }
+            #pageList { display: flex; overflow-x: auto; }
+            .page-card { flex: 0 0 135px; }
+            .stage { min-height: 60vh; padding: 14px 8px; }
+            .inspector { grid-column: auto; }
+            .inspector-content { grid-template-columns: 1fr; }
+            .welcome { min-height: 280px; margin: 4vh auto; padding: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a class="back-link" href="index.html">&#8592; Hub</a>
+        <h1>PDF Document Editor</h1>
+        <div class="doc-status" id="docStatus" aria-live="polite">No document open</div>
+    </header>
+    <nav class="toolbar" aria-label="PDF editing tools">
+        <div class="toolbar-group">
+            <button id="openPdfBtn" type="button">Open PDF</button>
+            <button id="mergePdfBtn" type="button" disabled>Insert PDF</button>
+            <span class="toolbar-separator"></span>
+            <button id="addTextBtn" type="button" disabled>Add text</button>
+            <button id="addImageBtn" type="button" disabled>Add image</button>
+            <button id="addShapeBtn" type="button" disabled>Add shape</button>
+            <button id="penBtn" type="button" disabled aria-pressed="false">Pen</button>
+            <button id="undoBtn" class="icon-button" type="button" title="Undo" aria-label="Undo" disabled>&#8630;</button>
+            <button id="redoBtn" class="icon-button" type="button" title="Redo" aria-label="Redo" disabled>&#8631;</button>
+        </div>
+        <div class="toolbar-group">
+            <label for="zoomSelect">Zoom</label>
+            <select id="zoomSelect" aria-label="Zoom level" disabled>
+                <option value="0.6">60%</option>
+                <option value="0.8">80%</option>
+                <option value="1" selected>100%</option>
+                <option value="1.25">125%</option>
+                <option value="1.5">150%</option>
+            </select>
+            <button id="exportBtn" class="primary" type="button" disabled>Export PDF</button>
+        </div>
+    </nav>
+    <main>
+        <div class="workspace">
+            <aside class="page-rail" aria-label="Document pages">
+                <h2 class="rail-heading"><span>Pages</span><span id="pageCount">0</span></h2>
+                <div id="pageList"><p class="page-empty">Open a PDF to manage its pages.</p></div>
+                <div class="page-controls">
+                    <button id="addPageBtn" type="button" disabled title="Add blank page">+ Page</button>
+                    <button id="duplicatePageBtn" type="button" disabled title="Duplicate page">Duplicate</button>
+                </div>
+                <div class="page-controls">
+                    <button id="movePageUpBtn" type="button" disabled title="Move page earlier">Move up</button>
+                    <button id="movePageDownBtn" type="button" disabled title="Move page later">Move down</button>
+                    <button id="deletePageBtn" class="danger" type="button" disabled title="Delete page">Delete</button>
+                </div>
+            </aside>
+            <section class="stage" id="stage" aria-label="PDF page canvas">
+                <div class="welcome" id="welcomePanel">
+                    <h2>Work on a PDF</h2>
+                    <p>Reorder, duplicate, remove, or add pages. Place text, images, colored shapes, and freehand marks on top of existing pages, then export a new PDF.</p>
+                    <div class="welcome-actions">
+                        <button class="primary" id="welcomeOpenBtn" type="button">Open a PDF</button>
+                        <button id="newDocumentBtn" type="button">Start a blank document</button>
+                    </div>
+                    <p class="muted-note">All processing stays in this browser. Original page contents are preserved; added objects can be moved, resized, recolored, and removed.</p>
+                </div>
+                <div id="pageSurface" class="hidden">
+                    <canvas id="pageCanvas"></canvas>
+                    <canvas id="inkCanvas"></canvas>
+                    <div id="itemLayer"></div>
+                </div>
+            </section>
+            <aside class="inspector" aria-label="Properties">
+                <h2 class="inspector-heading">Properties</h2>
+                <div class="inspector-content">
+                    <section class="inspector-section">
+                        <h3 class="rail-heading">Selected object</h3>
+                        <div class="field">
+                            <label for="objectText">Text</label>
+                            <textarea id="objectText" disabled placeholder="Select or add a text object"></textarea>
+                        </div>
+                        <div class="field-row">
+                            <div class="field"><label for="objectColor">Color</label><input id="objectColor" type="color" value="#315eb8" disabled></div>
+                            <div class="field"><label for="objectSize">Size</label><input id="objectSize" type="number" min="6" max="144" value="24" disabled></div>
+                        </div>
+                        <div class="field"><label for="objectOpacity">Opacity</label><input id="objectOpacity" type="range" min="10" max="100" value="100" disabled></div>
+                        <div class="inspector-actions">
+                            <button id="duplicateObjectBtn" type="button" disabled>Duplicate</button>
+                            <button id="deleteObjectBtn" class="danger" type="button" disabled>Delete</button>
+                        </div>
+                    </section>
+                    <section class="inspector-section">
+                        <h3 class="rail-heading">New object</h3>
+                        <div class="field"><label for="newText">Text to add</label><textarea id="newText" placeholder="Type text for the page"></textarea></div>
+                        <p class="muted-note">Select an object to drag it. Use the corner handle to resize.</p>
+                    </section>
+                    <section class="inspector-section">
+                        <h3 class="rail-heading">Document details</h3>
+                        <div class="field"><label for="metaTitle">Title</label><input id="metaTitle" type="text" placeholder="Document title" disabled></div>
+                        <div class="field"><label for="metaAuthor">Author</label><input id="metaAuthor" type="text" placeholder="Author" disabled></div>
+                        <div class="field"><label for="metaSubject">Subject</label><input id="metaSubject" type="text" placeholder="Subject" disabled></div>
+                    </section>
+                </div>
+            </aside>
+        </div>
+    </main>
+    <input id="pdfInput" type="file" accept="application/pdf,.pdf">
+    <input id="mergeInput" type="file" accept="application/pdf,.pdf">
+    <input id="imageInput" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg">
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = './vendor/pdfjs/pdf.worker.min.js';
+
+        const byId = (id) => document.getElementById(id);
+        const pdfInput = byId('pdfInput');
+        const mergeInput = byId('mergeInput');
+        const imageInput = byId('imageInput');
+        const stage = byId('stage');
+        const pageSurface = byId('pageSurface');
+        const pageCanvas = byId('pageCanvas');
+        const inkCanvas = byId('inkCanvas');
+        const itemLayer = byId('itemLayer');
+        const context = pageCanvas.getContext('2d');
+        const inkContext = inkCanvas.getContext('2d');
+        const buttonIds = ['mergePdfBtn', 'addTextBtn', 'addImageBtn', 'addShapeBtn', 'penBtn', 'exportBtn', 'zoomSelect', 'addPageBtn', 'duplicatePageBtn', 'movePageUpBtn', 'movePageDownBtn', 'deletePageBtn'];
+        let sources = [];
+        let pages = [];
+        let currentPageId = null;
+        let selectedItemId = null;
+        let activeViewport = null;
+        let zoomFactor = 1;
+        let isDrawing = false;
+        let activeStroke = null;
+        let dragState = null;
+        let undoStack = [];
+        let redoStack = [];
+        let nextId = 1;
+
+        const currentPage = () => pages.find((page) => page.id === currentPageId) || null;
+        const newId = () => `item-${nextId++}`;
+
+        function setDocumentEnabled(enabled) {
+            buttonIds.forEach((id) => { byId(id).disabled = !enabled; });
+            ['metaTitle', 'metaAuthor', 'metaSubject'].forEach((id) => { byId(id).disabled = !enabled; });
+        }
+
+        function snapshot() {
+            return JSON.stringify({ pages, currentPageId, selectedItemId, nextId });
+        }
+
+        function saveHistory() {
+            undoStack.push(snapshot());
+            if (undoStack.length > 40) undoStack.shift();
+            redoStack = [];
+            updateHistoryButtons();
+        }
+
+        function restoreSnapshot(value) {
+            const state = JSON.parse(value);
+            pages = state.pages;
+            currentPageId = state.currentPageId;
+            selectedItemId = state.selectedItemId;
+            nextId = state.nextId;
+            renderPageList();
+            renderCurrentPage();
+            updateControls();
+        }
+
+        function updateHistoryButtons() {
+            byId('undoBtn').disabled = undoStack.length === 0;
+            byId('redoBtn').disabled = redoStack.length === 0;
+        }
+
+        function undo() {
+            if (!undoStack.length) return;
+            redoStack.push(snapshot());
+            restoreSnapshot(undoStack.pop());
+            updateHistoryButtons();
+        }
+
+        function redo() {
+            if (!redoStack.length) return;
+            undoStack.push(snapshot());
+            restoreSnapshot(redoStack.pop());
+            updateHistoryButtons();
+        }
+
+        async function readSource(file) {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const loadingTask = pdfjsLib.getDocument({ data: bytes.slice() });
+            const pdfjs = await loadingTask.promise;
+            const pdfLib = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: false });
+            return { name: file.name, pdfjs, pdfLib };
+        }
+
+        async function openPdf(file) {
+            try {
+                const source = await readSource(file);
+                sources = [source];
+                pages = [];
+                for (let index = 0; index < source.pdfjs.numPages; index++) {
+                    const pdfPage = await source.pdfjs.getPage(index + 1);
+                    const viewport = pdfPage.getViewport({ scale: 1 });
+                    pages.push({ id: newId(), sourceId: 0, sourcePage: index, width: viewport.width, height: viewport.height, items: [] });
+                }
+                currentPageId = pages[0]?.id || null;
+                selectedItemId = null;
+                undoStack = [];
+                redoStack = [];
+                byId('docStatus').textContent = `${file.name} · ${pages.length} page${pages.length === 1 ? '' : 's'}`;
+                byId('welcomePanel').classList.add('hidden');
+                pageSurface.classList.remove('hidden');
+                setDocumentEnabled(true);
+                const metadata = source.pdfLib.getTitle();
+                byId('metaTitle').value = metadata || '';
+                byId('metaAuthor').value = source.pdfLib.getAuthor() || '';
+                byId('metaSubject').value = source.pdfLib.getSubject() || '';
+                renderPageList();
+                updateControls();
+                await renderCurrentPage();
+            } catch (error) {
+                alert(`Could not open this PDF: ${error.message}`);
+            }
+        }
+
+        async function startBlankDocument() {
+            sources = [];
+            pages = [{ id: newId(), sourceId: null, sourcePage: null, width: 612, height: 792, items: [] }];
+            currentPageId = pages[0].id;
+            selectedItemId = null;
+            undoStack = [];
+            redoStack = [];
+            byId('docStatus').textContent = 'Untitled document · 1 page';
+            byId('metaTitle').value = '';
+            byId('metaAuthor').value = '';
+            byId('metaSubject').value = '';
+            byId('welcomePanel').classList.add('hidden');
+            pageSurface.classList.remove('hidden');
+            setDocumentEnabled(true);
+            renderPageList();
+            updateControls();
+            await renderCurrentPage();
+        }
+
+        async function mergePdf(file) {
+            try {
+                const source = await readSource(file);
+                const sourceId = sources.length;
+                sources.push(source);
+                saveHistory();
+                for (let index = 0; index < source.pdfjs.numPages; index++) {
+                    const pdfPage = await source.pdfjs.getPage(index + 1);
+                    const viewport = pdfPage.getViewport({ scale: 1 });
+                    pages.push({ id: newId(), sourceId, sourcePage: index, width: viewport.width, height: viewport.height, items: [] });
+                }
+                byId('docStatus').textContent = `${byId('docStatus').textContent.split(' · ')[0]} · ${pages.length} pages`;
+                renderPageList();
+                updateControls();
+                await renderCurrentPage();
+            } catch (error) {
+                alert(`Could not insert this PDF: ${error.message}`);
+            }
+        }
+
+        function updateControls() {
+            const index = pages.findIndex((page) => page.id === currentPageId);
+            const hasPage = index >= 0;
+            byId('pageCount').textContent = String(pages.length);
+            byId('addPageBtn').disabled = !hasPage;
+            byId('duplicatePageBtn').disabled = !hasPage;
+            byId('movePageUpBtn').disabled = !hasPage || index === 0;
+            byId('movePageDownBtn').disabled = !hasPage || index === pages.length - 1;
+            byId('deletePageBtn').disabled = !hasPage;
+            byId('mergePdfBtn').disabled = !hasPage;
+            byId('addTextBtn').disabled = !hasPage;
+            byId('addImageBtn').disabled = !hasPage;
+            byId('addShapeBtn').disabled = !hasPage;
+            byId('penBtn').disabled = !hasPage;
+            byId('exportBtn').disabled = !hasPage;
+            byId('zoomSelect').disabled = !hasPage;
+            syncSelectedItem();
+        }
+
+        function renderPageList() {
+            const list = byId('pageList');
+            list.replaceChildren();
+            if (!pages.length) {
+                const empty = document.createElement('p');
+                empty.className = 'page-empty';
+                empty.textContent = 'Open a PDF to manage its pages.';
+                list.append(empty);
+                return;
+            }
+            pages.forEach((page, index) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'page-card';
+                button.setAttribute('aria-current', page.id === currentPageId ? 'page' : 'false');
+                const pageInfo = document.createElement('span');
+                pageInfo.innerHTML = `<span class="page-index">${String(index + 1).padStart(2, '0')}</span><small>${page.sourceId === null ? 'Blank page' : 'PDF page'}${page.items.length ? ` · ${page.items.length} edit${page.items.length === 1 ? '' : 's'}` : ''}</small>`;
+                button.append(pageInfo);
+                button.addEventListener('click', () => {
+                    currentPageId = page.id;
+                    selectedItemId = null;
+                    renderPageList();
+                    updateControls();
+                    renderCurrentPage();
+                });
+                list.append(button);
+            });
+        }
+
+        async function renderCurrentPage() {
+            const page = currentPage();
+            if (!page) return;
+            const source = page.sourceId === null ? null : sources[page.sourceId];
+            let pdfPage = null;
+            if (source) pdfPage = await source.pdfjs.getPage(page.sourcePage + 1);
+            const rawViewport = pdfPage ? pdfPage.getViewport({ scale: 1 }) : { width: page.width, height: page.height };
+            const maxWidth = Math.max(240, stage.clientWidth - 64);
+            const maxHeight = Math.max(300, stage.clientHeight - 52);
+            const scale = Math.min(maxWidth / rawViewport.width, maxHeight / rawViewport.height, 1.35) * zoomFactor;
+            activeViewport = pdfPage ? pdfPage.getViewport({ scale }) : { width: rawViewport.width * scale, height: rawViewport.height * scale, scale };
+            const pixelRatio = window.devicePixelRatio || 1;
+            pageCanvas.width = Math.ceil(activeViewport.width * pixelRatio);
+            pageCanvas.height = Math.ceil(activeViewport.height * pixelRatio);
+            pageCanvas.style.width = `${activeViewport.width}px`;
+            pageCanvas.style.height = `${activeViewport.height}px`;
+            inkCanvas.width = pageCanvas.width;
+            inkCanvas.height = pageCanvas.height;
+            inkCanvas.style.width = pageCanvas.style.width;
+            inkCanvas.style.height = pageCanvas.style.height;
+            pageSurface.style.width = `${activeViewport.width}px`;
+            pageSurface.style.height = `${activeViewport.height}px`;
+            context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+            context.clearRect(0, 0, activeViewport.width, activeViewport.height);
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, activeViewport.width, activeViewport.height);
+            if (pdfPage) {
+                try { await pdfPage.render({ canvasContext: context, viewport: activeViewport }).promise; }
+                catch (error) { byId('docStatus').textContent = `Page render warning: ${error.message}`; }
+            }
+            renderItems(page);
+            updateControls();
+        }
+
+        function parseColor(hex) {
+            const value = hex.replace('#', '');
+            return PDFLib.rgb(parseInt(value.slice(0, 2), 16) / 255, parseInt(value.slice(2, 4), 16) / 255, parseInt(value.slice(4, 6), 16) / 255);
+        }
+
+        function drawStrokes(page) {
+            const ratio = window.devicePixelRatio || 1;
+            inkContext.setTransform(ratio, 0, 0, ratio, 0, 0);
+            inkContext.clearRect(0, 0, activeViewport.width, activeViewport.height);
+            page.items.filter((item) => item.type === 'stroke').forEach((item) => {
+                if (item.points.length < 2) return;
+                inkContext.beginPath();
+                inkContext.moveTo(item.points[0].x * activeViewport.width, item.points[0].y * activeViewport.height);
+                item.points.slice(1).forEach((point) => inkContext.lineTo(point.x * activeViewport.width, point.y * activeViewport.height));
+                inkContext.strokeStyle = item.color;
+                inkContext.globalAlpha = item.opacity;
+                inkContext.lineWidth = Math.max(1, item.size * activeViewport.scale);
+                inkContext.lineCap = 'round';
+                inkContext.lineJoin = 'round';
+                inkContext.stroke();
+            });
+            inkContext.globalAlpha = 1;
+        }
+
+        function renderItems(page) {
+            itemLayer.replaceChildren();
+            drawStrokes(page);
+            page.items.filter((item) => item.type !== 'stroke').forEach((item) => {
+                const element = document.createElement('div');
+                element.className = `page-item ${item.type}-item${item.id === selectedItemId ? ' selected' : ''}`;
+                element.dataset.itemId = item.id;
+                element.style.left = `${item.x * 100}%`;
+                element.style.top = `${item.y * 100}%`;
+                element.style.width = `${item.w * 100}%`;
+                element.style.height = `${item.h * 100}%`;
+                element.style.opacity = String(item.opacity ?? 1);
+                if (item.type === 'text') {
+                    element.textContent = item.text;
+                    element.style.color = item.color;
+                    element.style.fontSize = `${item.size * activeViewport.scale}px`;
+                } else if (item.type === 'image') {
+                    const image = document.createElement('img');
+                    image.src = item.dataUrl;
+                    image.alt = item.name || 'Added image';
+                    element.append(image);
+                } else if (item.type === 'rect') {
+                    element.style.backgroundColor = item.color;
+                }
+                element.addEventListener('pointerdown', beginItemDrag);
+                element.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    selectedItemId = item.id;
+                    syncSelectedItem();
+                    renderItems(page);
+                });
+                if (item.id === selectedItemId) {
+                    const handle = document.createElement('button');
+                    handle.type = 'button';
+                    handle.className = 'resize-handle';
+                    handle.setAttribute('aria-label', 'Resize selected object');
+                    handle.addEventListener('pointerdown', beginItemResize);
+                    element.append(handle);
+                }
+                itemLayer.append(element);
+            });
+        }
+
+        function syncSelectedItem() {
+            const page = currentPage();
+            const item = page?.items.find((entry) => entry.id === selectedItemId) || null;
+            byId('objectText').disabled = !item || item.type !== 'text';
+            byId('objectText').value = item?.type === 'text' ? item.text : '';
+            byId('objectColor').disabled = !item || item.type === 'image';
+            byId('objectColor').value = item?.color || '#315eb8';
+            byId('objectSize').disabled = !item || item.type === 'image';
+            byId('objectSize').value = item?.size || 24;
+            byId('objectOpacity').disabled = !item;
+            byId('objectOpacity').value = Math.round((item?.opacity ?? 1) * 100);
+            byId('duplicateObjectBtn').disabled = !item;
+            byId('deleteObjectBtn').disabled = !item;
+        }
+
+        function addItem(item) {
+            const page = currentPage();
+            if (!page) return;
+            saveHistory();
+            item.id = newId();
+            page.items.push(item);
+            selectedItemId = item.id;
+            renderItems(page);
+            renderPageList();
+            syncSelectedItem();
+        }
+
+        function addText() {
+            const text = byId('newText').value.trim();
+            if (!text) {
+                byId('newText').focus();
+                return;
+            }
+            addItem({ type: 'text', text, x: .12, y: .12, w: .48, h: .15, size: 24, color: '#17233c', opacity: 1 });
+        }
+
+        async function addImage(file) {
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsDataURL(file);
+            });
+            const image = new Image();
+            image.src = dataUrl;
+            await image.decode();
+            const page = currentPage();
+            const width = .34;
+            const height = Math.min(.55, width * image.height / image.width * page.width / page.height);
+            addItem({ type: 'image', dataUrl, mime: file.type, name: file.name, x: .3, y: .25, w: width, h: height, opacity: 1 });
+        }
+
+        function addBlankPage() {
+            const page = currentPage();
+            const newPage = { id: newId(), sourceId: null, sourcePage: null, width: page?.width || 612, height: page?.height || 792, items: [] };
+            saveHistory();
+            const index = pages.findIndex((entry) => entry.id === currentPageId);
+            pages.splice(index + 1, 0, newPage);
+            currentPageId = newPage.id;
+            selectedItemId = null;
+            renderPageList();
+            updateControls();
+            renderCurrentPage();
+        }
+
+        function duplicatePage() {
+            const index = pages.findIndex((page) => page.id === currentPageId);
+            if (index < 0) return;
+            saveHistory();
+            const copy = JSON.parse(JSON.stringify(pages[index]));
+            copy.id = newId();
+            copy.items.forEach((item) => { item.id = newId(); });
+            pages.splice(index + 1, 0, copy);
+            currentPageId = copy.id;
+            selectedItemId = null;
+            renderPageList();
+            updateControls();
+            renderCurrentPage();
+        }
+
+        function movePage(direction) {
+            const index = pages.findIndex((page) => page.id === currentPageId);
+            const target = index + direction;
+            if (index < 0 || target < 0 || target >= pages.length) return;
+            saveHistory();
+            [pages[index], pages[target]] = [pages[target], pages[index]];
+            renderPageList();
+            updateControls();
+        }
+
+        function deletePage() {
+            if (pages.length <= 1) {
+                alert('A document must have at least one page.');
+                return;
+            }
+            saveHistory();
+            const index = pages.findIndex((page) => page.id === currentPageId);
+            pages.splice(index, 1);
+            currentPageId = pages[Math.max(0, index - 1)].id;
+            selectedItemId = null;
+            renderPageList();
+            updateControls();
+            renderCurrentPage();
+        }
+
+        function beginItemDrag(event) {
+            if (event.target.classList.contains('resize-handle') || byId('penBtn').classList.contains('active')) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const itemId = event.currentTarget.dataset.itemId;
+            if (selectedItemId !== itemId) {
+                selectedItemId = itemId;
+                itemLayer.querySelectorAll('.page-item').forEach((element) => {
+                    element.classList.toggle('selected', element.dataset.itemId === itemId);
+                });
+                syncSelectedItem();
+            }
+            const item = currentPage().items.find((entry) => entry.id === itemId);
+            saveHistory();
+            dragState = { itemId, type: 'move', startX: event.clientX, startY: event.clientY, x: item.x, y: item.y };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            event.currentTarget.addEventListener('pointermove', updateItemDrag);
+            event.currentTarget.addEventListener('pointerup', endItemDrag, { once: true });
+            event.currentTarget.addEventListener('pointercancel', endItemDrag, { once: true });
+        }
+
+        function beginItemResize(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const item = currentPage().items.find((entry) => entry.id === selectedItemId);
+            saveHistory();
+            dragState = { itemId: item.id, type: 'resize', startX: event.clientX, startY: event.clientY, w: item.w, h: item.h };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            event.currentTarget.addEventListener('pointermove', updateItemDrag);
+            event.currentTarget.addEventListener('pointerup', endItemDrag, { once: true });
+            event.currentTarget.addEventListener('pointercancel', endItemDrag, { once: true });
+        }
+
+        function updateItemDrag(event) {
+            if (!dragState || !activeViewport) return;
+            const item = currentPage().items.find((entry) => entry.id === dragState.itemId);
+            const dx = (event.clientX - dragState.startX) / activeViewport.width;
+            const dy = (event.clientY - dragState.startY) / activeViewport.height;
+            if (dragState.type === 'move') {
+                item.x = Math.min(1 - item.w, Math.max(0, dragState.x + dx));
+                item.y = Math.min(1 - item.h, Math.max(0, dragState.y + dy));
+            } else {
+                item.w = Math.min(1 - item.x, Math.max(.035, dragState.w + dx));
+                item.h = Math.min(1 - item.y, Math.max(.035, dragState.h + dy));
+            }
+            const element = itemLayer.querySelector(`[data-item-id="${item.id}"]`);
+            element.style.left = `${item.x * 100}%`;
+            element.style.top = `${item.y * 100}%`;
+            element.style.width = `${item.w * 100}%`;
+            element.style.height = `${item.h * 100}%`;
+        }
+
+        function endItemDrag() {
+            dragState = null;
+            renderPageList();
+        }
+
+        function beginPen(event) {
+            if (!byId('penBtn').classList.contains('active') || !activeViewport) return;
+            event.preventDefault();
+            const bounds = pageSurface.getBoundingClientRect();
+            saveHistory();
+            isDrawing = true;
+            activeStroke = { id: newId(), type: 'stroke', points: [{ x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height }], color: byId('objectColor').value || '#c2413b', size: 3, opacity: 1 };
+            currentPage().items.push(activeStroke);
+            pageSurface.setPointerCapture(event.pointerId);
+            renderItems(currentPage());
+        }
+
+        function continuePen(event) {
+            if (!isDrawing || !activeStroke) return;
+            const bounds = pageSurface.getBoundingClientRect();
+            activeStroke.points.push({ x: (event.clientX - bounds.left) / bounds.width, y: (event.clientY - bounds.top) / bounds.height });
+            drawStrokes(currentPage());
+        }
+
+        function endPen() {
+            if (!isDrawing) return;
+            isDrawing = false;
+            activeStroke = null;
+            selectedItemId = currentPage().items.at(-1)?.id || null;
+            renderItems(currentPage());
+            renderPageList();
+            syncSelectedItem();
+        }
+
+        function duplicateObject() {
+            const page = currentPage();
+            const item = page?.items.find((entry) => entry.id === selectedItemId);
+            if (!item) return;
+            saveHistory();
+            const copy = JSON.parse(JSON.stringify(item));
+            copy.id = newId();
+            copy.x = Math.min(.92 - copy.w, copy.x + .04);
+            copy.y = Math.min(.92 - copy.h, copy.y + .04);
+            page.items.push(copy);
+            selectedItemId = copy.id;
+            renderItems(page);
+            renderPageList();
+            syncSelectedItem();
+        }
+
+        function deleteObject() {
+            const page = currentPage();
+            if (!page || !selectedItemId) return;
+            saveHistory();
+            page.items = page.items.filter((item) => item.id !== selectedItemId);
+            selectedItemId = null;
+            renderItems(page);
+            renderPageList();
+            syncSelectedItem();
+        }
+
+        function viewportPoint(page, x, y) {
+            const source = page.sourceId === null ? null : sources[page.sourceId];
+            const dimensions = activeViewport || { width: page.width, height: page.height, scale: 1 };
+            if (source && dimensions.convertToPdfPoint) {
+                const point = dimensions.convertToPdfPoint(x * dimensions.width, y * dimensions.height);
+                return { x: point[0], y: point[1] };
+            }
+            return { x: x * page.width, y: page.height - y * page.height };
+        }
+
+        async function exportPdf() {
+            const button = byId('exportBtn');
+            button.disabled = true;
+            button.textContent = 'Preparing…';
+            try {
+                const output = await PDFLib.PDFDocument.create();
+                for (const page of pages) {
+                    let outputPage;
+                    if (page.sourceId === null) {
+                        outputPage = output.addPage([page.width, page.height]);
+                    } else {
+                        const source = sources[page.sourceId];
+                        [outputPage] = await output.copyPages(source.pdfLib, [page.sourcePage]);
+                        output.addPage(outputPage);
+                    }
+                    const rotation = page.sourceId === null ? 0 : (await sources[page.sourceId].pdfjs.getPage(page.sourcePage + 1)).rotate;
+                    const viewport = page.sourceId === null ? null : (await sources[page.sourceId].pdfjs.getPage(page.sourcePage + 1)).getViewport({ scale: 1 });
+                    for (const item of page.items) {
+                        if (item.type === 'stroke') {
+                            for (let index = 1; index < item.points.length; index++) {
+                                const start = viewport ? viewport.convertToPdfPoint(item.points[index - 1].x * viewport.width, item.points[index - 1].y * viewport.height) : [item.points[index - 1].x * page.width, page.height - item.points[index - 1].y * page.height];
+                                const end = viewport ? viewport.convertToPdfPoint(item.points[index].x * viewport.width, item.points[index].y * viewport.height) : [item.points[index].x * page.width, page.height - item.points[index].y * page.height];
+                                outputPage.drawLine({ start: { x: start[0], y: start[1] }, end: { x: end[0], y: end[1] }, thickness: item.size, color: parseColor(item.color), opacity: item.opacity });
+                            }
+                            continue;
+                        }
+                        const left = viewport ? viewport.convertToPdfPoint(item.x * viewport.width, (item.y + item.h) * viewport.height) : [item.x * page.width, page.height - (item.y + item.h) * page.height];
+                        const right = viewport ? viewport.convertToPdfPoint((item.x + item.w) * viewport.width, (item.y + item.h) * viewport.height) : [(item.x + item.w) * page.width, page.height - (item.y + item.h) * page.height];
+                        const top = viewport ? viewport.convertToPdfPoint(item.x * viewport.width, item.y * viewport.height) : [item.x * page.width, page.height - item.y * page.height];
+                        const objectWidth = Math.hypot(right[0] - left[0], right[1] - left[1]);
+                        const objectHeight = Math.hypot(top[0] - left[0], top[1] - left[1]);
+                        const angle = Math.atan2(right[1] - left[1], right[0] - left[0]) * 180 / Math.PI;
+                        const color = item.color ? parseColor(item.color) : undefined;
+                        if (item.type === 'text') {
+                            const font = await output.embedFont(PDFLib.StandardFonts.Helvetica);
+                            outputPage.drawText(item.text, { x: left[0], y: left[1], size: item.size, font, color, opacity: item.opacity, rotate: PDFLib.degrees(angle), maxWidth: objectWidth });
+                        } else if (item.type === 'rect') {
+                            outputPage.drawRectangle({ x: left[0], y: left[1], width: objectWidth, height: objectHeight, color, opacity: item.opacity, rotate: PDFLib.degrees(angle) });
+                        } else if (item.type === 'image') {
+                            const imageBytes = await (await fetch(item.dataUrl)).arrayBuffer();
+                            const image = item.mime === 'image/jpeg' ? await output.embedJpg(imageBytes) : await output.embedPng(imageBytes);
+                            outputPage.drawImage(image, { x: left[0], y: left[1], width: objectWidth, height: objectHeight, opacity: item.opacity, rotate: PDFLib.degrees(angle) });
+                        }
+                    }
+                }
+                output.setTitle(byId('metaTitle').value.trim());
+                output.setAuthor(byId('metaAuthor').value.trim());
+                output.setSubject(byId('metaSubject').value.trim());
+                const bytes = await output.save();
+                const blob = new Blob([bytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                const name = (sources[0]?.name || byId('metaTitle').value || 'document').replace(/\.pdf$/i, '').replace(/[^\w.-]+/g, '-');
+                anchor.download = `${name}-edited.pdf`;
+                anchor.click();
+                window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+                byId('docStatus').textContent = `Exported ${anchor.download}`;
+            } catch (error) {
+                alert(`Could not export this PDF: ${error.message}`);
+            } finally {
+                button.textContent = 'Export PDF';
+                button.disabled = false;
+            }
+        }
+
+        byId('openPdfBtn').addEventListener('click', () => pdfInput.click());
+        byId('welcomeOpenBtn').addEventListener('click', () => pdfInput.click());
+        pdfInput.addEventListener('change', () => { if (pdfInput.files[0]) openPdf(pdfInput.files[0]); pdfInput.value = ''; });
+        byId('mergePdfBtn').addEventListener('click', () => mergeInput.click());
+        mergeInput.addEventListener('change', () => { if (mergeInput.files[0]) mergePdf(mergeInput.files[0]); mergeInput.value = ''; });
+        byId('newDocumentBtn').addEventListener('click', startBlankDocument);
+        byId('addPageBtn').addEventListener('click', addBlankPage);
+        byId('duplicatePageBtn').addEventListener('click', duplicatePage);
+        byId('movePageUpBtn').addEventListener('click', () => movePage(-1));
+        byId('movePageDownBtn').addEventListener('click', () => movePage(1));
+        byId('deletePageBtn').addEventListener('click', deletePage);
+        byId('addTextBtn').addEventListener('click', addText);
+        byId('addImageBtn').addEventListener('click', () => imageInput.click());
+        imageInput.addEventListener('change', () => { if (imageInput.files[0]) addImage(imageInput.files[0]).catch((error) => alert(error.message)); imageInput.value = ''; });
+        byId('addShapeBtn').addEventListener('click', () => addItem({ type: 'rect', x: .18, y: .18, w: .25, h: .16, color: byId('objectColor').value, opacity: .45 }));
+        byId('penBtn').addEventListener('click', () => {
+            const button = byId('penBtn');
+            button.classList.toggle('active');
+            button.setAttribute('aria-pressed', String(button.classList.contains('active')));
+            pageSurface.style.cursor = button.classList.contains('active') ? 'crosshair' : '';
+        });
+        byId('undoBtn').addEventListener('click', undo);
+        byId('redoBtn').addEventListener('click', redo);
+        byId('exportBtn').addEventListener('click', exportPdf);
+        byId('zoomSelect').addEventListener('change', (event) => { zoomFactor = Number(event.target.value); renderCurrentPage(); });
+        byId('duplicateObjectBtn').addEventListener('click', duplicateObject);
+        byId('deleteObjectBtn').addEventListener('click', deleteObject);
+        byId('objectText').addEventListener('focus', saveHistory);
+        byId('objectText').addEventListener('input', (event) => {
+            const item = currentPage()?.items.find((entry) => entry.id === selectedItemId);
+            if (item?.type === 'text') { item.text = event.target.value; renderItems(currentPage()); }
+        });
+        byId('objectColor').addEventListener('focus', saveHistory);
+        byId('objectColor').addEventListener('input', (event) => {
+            const item = currentPage()?.items.find((entry) => entry.id === selectedItemId);
+            if (!item) return;
+            item.color = event.target.value;
+            renderItems(currentPage());
+        });
+        byId('objectSize').addEventListener('focus', saveHistory);
+        byId('objectSize').addEventListener('input', (event) => {
+            const item = currentPage()?.items.find((entry) => entry.id === selectedItemId);
+            if (item && 'size' in item) { item.size = Number(event.target.value) || 24; renderItems(currentPage()); }
+        });
+        byId('objectOpacity').addEventListener('focus', saveHistory);
+        byId('objectOpacity').addEventListener('input', (event) => {
+            const item = currentPage()?.items.find((entry) => entry.id === selectedItemId);
+            if (item) { item.opacity = Number(event.target.value) / 100; renderItems(currentPage()); }
+        });
+        ['metaTitle', 'metaAuthor', 'metaSubject'].forEach((id) => byId(id).addEventListener('input', () => {
+            const sourceName = sources[0]?.name || 'Untitled document';
+            byId('docStatus').textContent = `${byId(id).value || sourceName} · ${pages.length} pages`;
+        }));
+        pageSurface.addEventListener('pointerdown', beginPen);
+        pageSurface.addEventListener('pointermove', continuePen);
+        pageSurface.addEventListener('pointerup', endPen);
+        pageSurface.addEventListener('pointercancel', endPen);
+        itemLayer.addEventListener('click', (event) => {
+            if (event.target === itemLayer) { selectedItemId = null; syncSelectedItem(); renderItems(currentPage()); }
+        });
+        window.addEventListener('resize', () => { if (currentPage()) renderCurrentPage(); });
+        window.addEventListener('keydown', (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+            else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); }
+            else if ((event.key === 'Delete' || event.key === 'Backspace') && selectedItemId && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) deleteObject();
+        });
+    </script>
+</body>
+</html>

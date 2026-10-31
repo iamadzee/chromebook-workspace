@@ -27,6 +27,19 @@
           "type": "image/png"
         }
       ]
+    },
+    {
+      "name": "PDF Document Editor",
+      "short_name": "PDF Editor",
+      "description": "Reorder PDF pages and add text, images, shapes, and annotations",
+      "url": "./pdf-editor.html",
+      "icons": [
+        {
+          "src": "./icon-512.png",
+          "sizes": "554x554",
+          "type": "image/png"
+        }
+      ]
     }
   ]
 }

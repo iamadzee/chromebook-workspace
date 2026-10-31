@@ -1,10 +1,11 @@
-const CACHE_NAME = 'screen-recorder-chromebook-v12';
+const CACHE_NAME = 'screen-recorder-chromebook-v14';
 const APP_FILES = [
   '',
   'index.html',
   'deck.html',
   'runner.html',
   'editor.html',
+  'pdf-editor.html',
   'screenrecorder.html',
   'flattener.html',
   'inspector.html',
@@ -20,6 +21,9 @@ const APP_FILES = [
   'sw.js',
   'vendor/marked.min.js',
   'vendor/jspdf.umd.min.js',
+  'vendor/pdfjs/pdf.min.js',
+  'vendor/pdfjs/pdf.worker.min.js',
+  'vendor/pdf-lib/pdf-lib.min.js',
   'vendor/tesseract/tesseract.min.js',
   'vendor/tesseract/worker.min.js',
   'vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
