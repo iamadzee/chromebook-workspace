@@ -3,10 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./theme.js"></script>
     <link rel="manifest" href="./manifest.json">
     <script src="./pwa.js" defer></script>
-    <title>Clean Scanner to PDF</title>
+    <meta name="description" content="Flatten photographed pages, recognize English text offline, correct OCR results, and export a searchable text PDF.">
+    <title>Document OCR & Searchable PDF</title>
     <script src="./vendor/jspdf.umd.min.js"></script>
+    <script src="./vendor/tesseract/tesseract.min.js"></script>
     <style>
         :root {
             --bg-color: #0b111e;
@@ -235,42 +238,62 @@
         }
 
         .page-list {
-            display: flex;
+            display: grid;
             gap: 0.75rem;
-            overflow-x: auto;
-            padding-bottom: 0.5rem;
-            min-height: 90px;
+            max-height: 420px;
+            overflow-y: auto;
         }
 
-        .page-thumb {
-            position: relative;
-            flex: 0 0 70px;
-            height: 90px;
-            border-radius: 4px;
-            overflow: hidden;
-            border: 2px solid var(--border-color);
+        .recognized-page {
+            display: grid;
+            grid-template-columns: 76px minmax(0, 1fr);
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
         }
-        .page-thumb img {
+
+        .recognized-page img {
             width: 100%;
-            height: 100%;
-            object-fit: cover;
+            aspect-ratio: 3 / 4;
+            object-fit: contain;
+            align-self: start;
+            background: white;
+            border-radius: 4px;
         }
-        .page-thumb .del-btn {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 18px;
-            height: 18px;
-            font-size: 11px;
-            cursor: pointer;
+
+        .recognized-page-body { min-width: 0; }
+        .recognized-page-header {
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
         }
+        .recognized-page-header strong { font-size: 0.85rem; }
+        .confidence { color: var(--text-dim); font-size: 0.78rem; }
+        .confidence.low { color: #ffcc80; }
+        .recognized-text {
+            width: 100%;
+            min-height: 125px;
+            padding: 0.65rem;
+            resize: vertical;
+            color: var(--text-main);
+            background: var(--term-bg, rgba(0, 0, 0, 0.3));
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font: 0.85rem/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+        .recognized-text:focus-visible { outline: 3px solid #93b4ff; outline-offset: 2px; }
+        .remove-page-btn {
+            padding: 0.35rem 0.55rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-main);
+            background: transparent;
+            cursor: pointer;
+        }
+        .ocr-status { min-height: 1.5em; color: var(--text-dim); font-size: 0.82rem; line-height: 1.4; }
 
         .placeholder-text {
             color: var(--text-dim);
@@ -289,7 +312,7 @@
 
     <header>
         <a href="index.html" class="back-link">← Back to Hub</a>
-        <h1>Clean Document Scanner</h1>
+        <h1>Document OCR & Searchable PDF</h1>
         <div style="width: 80px;"></div>
     </header>
 
@@ -314,10 +337,10 @@
             </div>
 
             <div class="panel">
-                <div class="panel-title">2. Processing Filter</div>
+                <div class="panel-title">2. Page & OCR Preparation</div>
                 <select id="filterSelect" disabled>
-                    <option value="bw">Crisp B&W (Pencil & Pen)</option>
-                    <option value="grayscale">Clean Grayscale</option>
+                    <option value="grayscale" selected>Clean grayscale (recommended)</option>
+                    <option value="bw">High-contrast B&W</option>
                     <option value="magic">Magic Color Boost</option>
                     <option value="original">Original Photo</option>
                 </select>
@@ -341,13 +364,15 @@
                         <span class="deskew-preview-status" id="deskewPreviewStatus">Load an image to preview straightening.</span>
                     </div>
                 </div>
-                <button class="btn btn-green" id="addPageBtn" disabled>+ Add Page</button>
+                <button class="btn btn-green" id="addPageBtn" disabled>Scan Text & Add Page</button>
+                <p class="ocr-status" id="ocrStatus" role="status" aria-live="polite">English OCR runs on-device. Review and correct each page's recognized text before downloading the PDF.</p>
             </div>
 
             <div class="panel">
-                <div class="panel-title">3. Document Output (<span id="pageCount">0</span>)</div>
+                <div class="panel-title">3. Recognized Text (<span id="pageCount">0 pages</span>)</div>
                 <div class="page-list" id="pageList"></div>
-                <button class="btn btn-green" id="exportPdfBtn" disabled>📥 Download Clean PDF</button>
+                <button class="btn btn-green" id="exportPdfBtn" disabled>📥 Download Searchable Text PDF</button>
+                <p class="deskew-help">The PDF contains selectable text rather than page photos. Correct OCR mistakes in the text boxes before exporting. Uses Tesseract's high-accuracy English model and retries low-confidence pages with another filter. English only.</p>
             </div>
         </div>
     </div>
@@ -370,6 +395,7 @@
         const resetRotationBtn = document.getElementById('resetRotationBtn');
         const deskewPreview = document.getElementById('deskewPreview');
         const deskewPreviewStatus = document.getElementById('deskewPreviewStatus');
+        const ocrStatus = document.getElementById('ocrStatus');
 
         let rawImg = null;
         let baseImg = null;
@@ -378,7 +404,50 @@
         let activeCornerIndex = -1;
         let previewTimeout = null;
         let previewRequest = 0;
+        let ocrWorker = null;
+        let ocrWorkerPromise = null;
+        let activeOcrPage = 0;
         const pages = [];
+
+        function setOcrStatus(message, isError = false) {
+            ocrStatus.textContent = message;
+            ocrStatus.style.color = isError ? '#ff9a9a' : '';
+        }
+
+        async function getOcrWorker() {
+            if (ocrWorker) return ocrWorker;
+            if (!ocrWorkerPromise) {
+                ocrWorkerPromise = Tesseract.createWorker('eng', 1, {
+                    workerPath: './vendor/tesseract/worker.min.js',
+                    corePath: './vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
+                    langPath: './vendor/tesseract/lang',
+                    gzip: true,
+                    cacheMethod: 'write',
+                    logger: (message) => {
+                        if (!message.status) return;
+                        const percent = Number.isFinite(message.progress)
+                            ? ` ${Math.round(message.progress * 100)}%`
+                            : '';
+                        const prefix = activeOcrPage && message.status === 'recognizing text'
+                            ? `Recognizing page ${activeOcrPage}`
+                            : 'Preparing offline OCR engine';
+                        setOcrStatus(`${prefix}: ${message.status}${percent}`);
+                    }
+                });
+            }
+            try {
+                ocrWorker = await ocrWorkerPromise;
+                await ocrWorker.setParameters({
+                    preserve_interword_spaces: '1',
+                    user_defined_dpi: '300'
+                });
+                return ocrWorker;
+            } catch (error) {
+                ocrWorker = null;
+                ocrWorkerPromise = null;
+                throw new Error(`Could not start the offline English OCR engine: ${error.message}`);
+            }
+        }
 
         // Handle Image Upload
         fileInput.addEventListener('change', (e) => {
@@ -417,10 +486,10 @@
             const w = rawImg.width;
             const h = rawImg.height;
             corners = [
-                { x: w * 0.1, y: h * 0.1 }, // Top-Left
-                { x: w * 0.9, y: h * 0.1 }, // Top-Right
-                { x: w * 0.9, y: h * 0.9 }, // Bottom-Right
-                { x: w * 0.1, y: h * 0.9 }  // Bottom-Left
+                { x: w * 0.04, y: h * 0.04 }, // Top-Left
+                { x: w * 0.96, y: h * 0.04 }, // Top-Right
+                { x: w * 0.96, y: h * 0.96 }, // Bottom-Right
+                { x: w * 0.04, y: h * 0.96 }  // Bottom-Left
             ];
         }
 
@@ -621,8 +690,15 @@
             outCtx.putImageData(outputPixels, 0, 0);
             applyFilter(outCtx, targetWidth, targetHeight, filterType);
 
+            const previewCanvas = document.createElement('canvas');
+            const previewScale = Math.min(1, 450 / Math.max(targetWidth, targetHeight));
+            previewCanvas.width = Math.max(1, Math.round(targetWidth * previewScale));
+            previewCanvas.height = Math.max(1, Math.round(targetHeight * previewScale));
+            previewCanvas.getContext('2d').drawImage(outCanvas, 0, 0, previewCanvas.width, previewCanvas.height);
+
             return {
-                data: outCanvas.toDataURL('image/jpeg', 0.95),
+                data: outCanvas.toDataURL('image/png'),
+                preview: previewCanvas.toDataURL('image/jpeg', 0.78),
                 width: targetWidth,
                 height: targetHeight
             };
@@ -744,10 +820,20 @@
             ctx.putImageData(imgData, 0, 0);
         }
 
-        // Page Stacking
+        async function recognizePage(imageData) {
+            const worker = await getOcrWorker();
+            const result = await worker.recognize(imageData);
+            return {
+                text: result.data.text.trim(),
+                confidence: Math.max(0, Math.min(100, Number(result.data.confidence) || 0))
+            };
+        }
+
+        // Flatten each captured page before OCR so perspective and rotation are corrected first.
         addPageBtn.addEventListener('click', async () => {
             addPageBtn.disabled = true;
             try {
+                setOcrStatus('Flattening and preparing the page for OCR…');
                 const sourceImage = rawImg;
                 const pageCorners = corners.map(point => ({ ...point }));
                 const processedPage = await generateWarpedPage(
@@ -755,61 +841,130 @@
                     pageCorners,
                     filterSelect.value
                 );
-                pages.push(processedPage);
+                setOcrStatus(`Recognizing page ${pages.length + 1} with the offline English model…`);
+                activeOcrPage = pages.length + 1;
+                let recognized = await recognizePage(processedPage.data);
+                let selectedPage = processedPage;
+
+                if (recognized.confidence < 78) {
+                    setOcrStatus('Recognition confidence is low. Retrying with a high-contrast version…');
+                    const alternateFilter = filterSelect.value === 'bw' ? 'grayscale' : 'bw';
+                    const alternatePage = await generateWarpedPage(sourceImage, pageCorners, alternateFilter);
+                    const alternateResult = await recognizePage(alternatePage.data);
+                    if (alternateResult.confidence > recognized.confidence) {
+                        recognized = alternateResult;
+                        selectedPage = alternatePage;
+                    }
+                }
+
+                pages.push({
+                    preview: selectedPage.preview,
+                    text: recognized.text,
+                    confidence: recognized.confidence
+                });
                 updatePageQueue();
+                const confidenceMessage = recognized.confidence < 75
+                    ? 'Review this low-confidence result carefully.'
+                    : 'Review and correct the text before exporting.';
+                setOcrStatus(`Page ${pages.length} recognized with ${Math.round(recognized.confidence)}% confidence. ${confidenceMessage}`);
             } catch (error) {
-                console.error('Unable to straighten scanned page.', error);
-                alert(`Unable to straighten this page: ${error.message}`);
+                console.error('Unable to recognize scanned page.', error);
+                setOcrStatus(`Unable to recognize this page: ${error.message}`, true);
             } finally {
+                activeOcrPage = 0;
                 addPageBtn.disabled = false;
             }
         });
 
         function updatePageQueue() {
-            pageList.innerHTML = '';
+            pageList.replaceChildren();
             pages.forEach((pageData, index) => {
-                const thumb = document.createElement('div');
-                thumb.className = 'page-thumb';
-                thumb.innerHTML = `
-                    <img src="${pageData.data}">
-                    <button class="del-btn" onclick="removePage(${index})">×</button>
-                `;
-                pageList.appendChild(thumb);
+                const card = document.createElement('article');
+                card.className = 'recognized-page';
+                const preview = document.createElement('img');
+                preview.src = pageData.preview;
+                preview.alt = `Flattened scan for page ${index + 1}`;
+                const body = document.createElement('div');
+                body.className = 'recognized-page-body';
+                const header = document.createElement('div');
+                header.className = 'recognized-page-header';
+                const title = document.createElement('strong');
+                title.textContent = `Page ${index + 1}`;
+                const confidence = document.createElement('span');
+                confidence.className = `confidence${pageData.confidence < 75 ? ' low' : ''}`;
+                confidence.textContent = `OCR confidence: ${Math.round(pageData.confidence)}%`;
+                const removeButton = document.createElement('button');
+                removeButton.className = 'remove-page-btn';
+                removeButton.type = 'button';
+                removeButton.textContent = 'Remove';
+                removeButton.setAttribute('aria-label', `Remove page ${index + 1}`);
+                removeButton.addEventListener('click', () => removePage(index));
+                header.append(title, confidence, removeButton);
+
+                const textArea = document.createElement('textarea');
+                textArea.className = 'recognized-text';
+                textArea.value = pageData.text;
+                textArea.setAttribute('aria-label', `Recognized text for page ${index + 1}`);
+                textArea.placeholder = 'No text recognized. You can enter it here before exporting.';
+                textArea.addEventListener('input', () => {
+                    pageData.text = textArea.value;
+                });
+                body.append(header, textArea);
+                card.append(preview, body);
+                pageList.append(card);
             });
 
-            pageCountSpan.textContent = pages.length;
+            pageCountSpan.textContent = `${pages.length} page${pages.length === 1 ? '' : 's'}`;
             exportPdfBtn.disabled = pages.length === 0;
         }
 
-        window.removePage = function(index) {
+        function removePage(index) {
             pages.splice(index, 1);
             updatePageQueue();
-        };
+            setOcrStatus(`Removed page. ${pages.length} page${pages.length === 1 ? '' : 's'} remain.`);
+        }
 
-        // Multi-page PDF Compilation (Offline)
+        // Create a text-only PDF so OCR output is searchable and selectable.
         exportPdfBtn.addEventListener('click', () => {
             if (pages.length === 0) return;
             const { jsPDF } = window.jspdf;
-            const firstPageLandscape = pages[0].width > pages[0].height;
             const doc = new jsPDF({
-                orientation: firstPageLandscape ? 'landscape' : 'portrait',
+                orientation: 'portrait',
                 unit: 'mm',
                 format: 'a4'
             });
-
-            pages.forEach((page, index) => {
-                const landscape = page.width > page.height;
-                if (index > 0) doc.addPage('a4', landscape ? 'landscape' : 'portrait');
-                const pageWidth = doc.internal.pageSize.getWidth();
-                const pageHeight = doc.internal.pageSize.getHeight();
-                const margin = 5;
-                const fit = Math.min((pageWidth - margin * 2) / page.width, (pageHeight - margin * 2) / page.height);
-                const width = page.width * fit;
-                const height = page.height * fit;
-                doc.addImage(page.data, 'JPEG', (pageWidth - width) / 2, (pageHeight - height) / 2, width, height);
+            const margin = 18;
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const pageHeight = doc.internal.pageSize.getHeight();
+            const lineHeight = 5.2;
+            doc.setProperties({
+                title: 'Scanned text',
+                subject: 'Offline OCR text extracted from scanned pages',
+                creator: 'Chromebook Tools'
             });
 
-            doc.save(`scan_${Date.now()}.pdf`);
+            pages.forEach((page, pageIndex) => {
+                if (pageIndex > 0) doc.addPage('a4', 'portrait');
+                let y = margin;
+                doc.setFont('helvetica', 'bold');
+                doc.setFontSize(15);
+                doc.text(`Scanned page ${pageIndex + 1}`, margin, y);
+                y += 10;
+                doc.setFont('helvetica', 'normal');
+                doc.setFontSize(11);
+                const pageText = page.text.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim() || '[No text recognized]';
+                const lines = doc.splitTextToSize(pageText, pageWidth - margin * 2);
+                for (const line of lines) {
+                    if (y > pageHeight - margin) {
+                        doc.addPage('a4', 'portrait');
+                        y = margin;
+                    }
+                    doc.text(line, margin, y);
+                    y += lineHeight;
+                }
+            });
+
+            doc.save(`scanned_text_${Date.now()}.pdf`);
         });
 
         // Direct Webcam Snap

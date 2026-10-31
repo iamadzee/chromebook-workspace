@@ -1,6 +1,6 @@
 {
-  "name": "Chrome Book Helper Tools",
-  "short_name": "HEHE",
+  "name": "Chromebook Workspaces",
+  "short_name": "Workspaces",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -16,9 +16,9 @@
   ],
   "shortcuts": [
     {
-      "name": "Config & Hex Editor",
+      "name": "Config & Binary File Editor",
       "short_name": "File Editor",
-      "description": "Open text and binary files in the Config & Hex Editor",
+      "description": "Open and edit configuration, text, and binary files",
       "url": "./editor.html",
       "icons": [
         {

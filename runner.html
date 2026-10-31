@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="manifest" href="./manifest.json">
     <script src="./pwa.js" defer></script>
-    <title>Instant Python Runner</title>
+    <script src="./theme.js"></script>
+    <title>Offline Python Runner</title>
     <!-- Local Pyodide bootstrap script -->
     <script src="./pyodide/pyodide.js"></script>
     <style>
@@ -353,7 +354,7 @@
 
     <header>
         <a href="index.html" class="back-link">← Back to Hub</a>
-        <h1>Local Python 3 (WASM)</h1>
+        <h1>Offline Python 3 Runner</h1>
         <div class="engine-status">
             <span class="status-dot" id="statusDot"></span>
             <span id="statusText">Booting Interpreter...</span>

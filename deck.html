@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b1020">
+    <script src="./theme.js"></script>
+    <title>YouTube Study Deck</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg-color: #0b1020;
+            --page-glow: #1c2b54;
+            --card-bg: rgba(22, 32, 57, 0.88);
+            --border-color: rgba(147, 180, 255, 0.16);
+            --accent-blue: #5279d9;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --text-main: #f3f6ff;
+            --text-dim: #aab5cd;
+            --term-bg: rgba(8, 14, 29, 0.9);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background: radial-gradient(ellipse at 50% 0%, var(--page-glow) 0%, var(--bg-color) 58%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1rem max(20px, calc((100vw - 1280px) / 2));
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(11, 16, 32, 0.88);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .back-link {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .back-link:hover { color: var(--text-main); }
+
+        h1 {
+            font-size: clamp(1.05rem, 2.5vw, 1.35rem);
+            font-weight: 650;
+            letter-spacing: -0.02em;
+        }
+
+        .btn {
+            background-color: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 0.45rem 1rem;
+            border-radius: 9px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, background-color 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn-red { background-color: var(--accent-red); }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+        }
+        .btn-outline:hover { background: rgba(255, 255, 255, 0.05); }
+
+        .url-bar-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem max(20px, calc((100vw - 1280px) / 2));
+            background: rgba(22, 32, 57, 0.42);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .url-input {
+            flex: 1;
+            background: var(--term-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-main);
+            padding: 0.6rem 1rem;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: monospace;
+        }
+        .url-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 2.2fr 1fr;
+            gap: 1.5rem;
+            padding: 24px;
+            flex: 1;
+            max-width: 1280px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        @media (max-width: 1050px) {
+            .container { grid-template-columns: 1fr; }
+        }
+
+        .pane {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+        }
+
+        /* 16:9 Video Canvas Wrapper */
+        .video-wrapper {
+            position: relative;
+            width: 100%;
+            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            background: #000;
+        }
+
+        .video-wrapper iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .empty-placeholder {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-dim);
+            gap: 0.75rem;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .pane-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .pane-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+        }
+
+        .notes-area {
+            flex: 1;
+            width: 100%;
+            min-height: 250px;
+            background: var(--term-bg);
+            color: var(--text-main);
+            border: none;
+            padding: 1.25rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+        }
+
+        .history-list {
+            list-style: none;
+            max-height: 200px;
+            overflow-y: auto;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.6rem 1.25rem;
+            font: inherit;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.8rem;
+            font-family: monospace;
+            cursor: pointer;
+            color: var(--text-main);
+            background: transparent;
+            border-left: 0;
+            border-right: 0;
+            border-top: 0;
+            width: 100%;
+            text-align: left;
+        }
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .status-message {
+            width: min(100%, 1280px);
+            min-height: 1.5em;
+            margin: 0 auto;
+            padding: 0 24px 12px;
+            color: var(--text-dim);
+            font-size: 0.875rem;
+        }
+
+        button:focus-visible,
+        a:focus-visible,
+        input:focus-visible,
+        textarea:focus-visible {
+            outline: 3px solid #93b4ff;
+            outline-offset: 3px;
+        }
+
+        @media (max-width: 700px) {
+            header {
+                flex-wrap: wrap;
+                justify-content: center;
+                padding: 16px;
+            }
+
+            header h1 {
+                order: -1;
+                width: 100%;
+                text-align: center;
+            }
+
+            .url-bar-container {
+                flex-wrap: wrap;
+                padding: 16px;
+            }
+
+            .url-input { min-width: 100%; }
+            .container { padding: 16px; }
+            .status-message { padding: 0 16px 12px; }
+        }
+    </style>
+    <link rel="stylesheet" href="./tool-theme.css">
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="back-link">← Back to Hub</a>
+        <h1>YouTube Study Deck & Notes</h1>
+        <button class="btn btn-red" id="purgeSessionBtn" type="button">Clear Session</button>
+    </header>
+
+    <div class="url-bar-container">
+        <input
+            type="text"
+            class="url-input"
+            id="urlInput"
+            placeholder="Paste a YouTube video, Shorts, or youtu.be link"
+            aria-label="YouTube video link or video ID"
+            autocomplete="off"
+            spellcheck="false"
+        >
+        <button class="btn" id="loadBtn" type="button">Load video</button>
+    </div>
+
+    <div class="container">
+        <!-- Main Isolated Video Screen -->
+        <div class="pane">
+            <div class="video-wrapper">
+                <div class="empty-placeholder" id="placeholder">
+                    <p style="font-size: 1.1rem; font-weight: 500;">Paste a video link to begin isolated playback</p>
+                    <span style="font-size: 0.85rem;">Zero sidebar recommendations, comments, or profile tracking cookies</span>
+                </div>
+                <iframe
+                    id="playerFrame"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowfullscreen
+                    style="display: none;"
+                ></iframe>
+            </div>
+        </div>
+
+        <!-- Ephemeral Scratchpad & Recent Session Clips -->
+        <div class="pane">
+            <div class="pane-toolbar">
+                <span class="pane-title">Saved Scratchpad</span>
+                <button class="btn btn-outline" id="exportNotesBtn" type="button" style="padding: 0.2rem 0.6rem; font-size: 0.75rem;">Export Notes</button>
+            </div>
+            <textarea class="notes-area" id="notesBox" placeholder="Timestamp markers and study notes for this video..."></textarea>
+
+            <div class="pane-toolbar">
+                <span class="pane-title">Recent videos</span>
+            </div>
+            <ul class="history-list" id="historyList" aria-label="Recently played videos"></ul>
+        </div>
+    </div>
+    <p class="status-message" id="statusMessage" role="status" aria-live="polite"></p>
+
+    <script>
+        const urlInput = document.getElementById('urlInput');
+        const loadBtn = document.getElementById('loadBtn');
+        const playerFrame = document.getElementById('playerFrame');
+        const placeholder = document.getElementById('placeholder');
+        const notesBox = document.getElementById('notesBox');
+        const purgeSessionBtn = document.getElementById('purgeSessionBtn');
+        const exportNotesBtn = document.getElementById('exportNotesBtn');
+        const historyList = document.getElementById('historyList');
+        const statusMessage = document.getElementById('statusMessage');
+
+        const notesStorageKey = 'video-deck-notes';
+        const historyStorageKey = 'video-deck-history';
+
+        function setStatus(message) {
+            statusMessage.textContent = message;
+        }
+
+        function readStoredValue(key) {
+            try {
+                return localStorage.getItem(key);
+            } catch {
+                setStatus('Local storage is unavailable. Notes and history will not persist after closing this page.');
+                return null;
+            }
+        }
+
+        function saveStoredValue(key, value) {
+            try {
+                localStorage.setItem(key, value);
+                return true;
+            } catch {
+                setStatus('Unable to save locally. Check your browser storage settings.');
+                return false;
+            }
+        }
+
+        function extractVideoId(input) {
+            const trimmed = input.trim();
+            if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+                return trimmed;
+            }
+
+            let parsedUrl;
+            try {
+                parsedUrl = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+            } catch {
+                return null;
+            }
+
+            if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+                return null;
+            }
+
+            const hostname = parsedUrl.hostname.toLowerCase();
+            const isShortLink = hostname === 'youtu.be';
+            const isYouTube = hostname === 'youtube.com'
+                || hostname.endsWith('.youtube.com')
+                || hostname === 'youtube-nocookie.com'
+                || hostname.endsWith('.youtube-nocookie.com');
+            if (!isShortLink && !isYouTube) {
+                return null;
+            }
+
+            let videoId = null;
+            if (isShortLink) {
+                videoId = parsedUrl.pathname.split('/').filter(Boolean)[0];
+            } else if (parsedUrl.pathname === '/watch') {
+                videoId = parsedUrl.searchParams.get('v');
+            } else {
+                videoId = parsedUrl.pathname.match(/^\/(?:embed|shorts|live|v)\/([a-zA-Z0-9_-]{11})(?:\/|$)/)?.[1] ?? null;
+            }
+
+            return videoId && /^[a-zA-Z0-9_-]{11}$/.test(videoId) ? videoId : null;
+        }
+
+        function playVideo(rawUrl) {
+            const videoId = extractVideoId(rawUrl);
+            if (!videoId) {
+                setStatus('Enter a valid YouTube video link or an 11-character video ID.');
+                return;
+            }
+
+            const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
+            playerFrame.src = embedUrl;
+            playerFrame.style.display = 'block';
+            placeholder.style.display = 'none';
+
+            if (!videoHistory.includes(videoId)) {
+                videoHistory.unshift(videoId);
+                videoHistory = videoHistory.slice(0, 10);
+                renderHistory();
+                const historySaved = saveStoredValue(historyStorageKey, JSON.stringify(videoHistory));
+                setStatus(historySaved
+                    ? 'Video loaded. Your notes and recent videos are saved on this device.'
+                    : 'Video loaded, but recent history could not be saved.');
+            } else {
+                setStatus('Video loaded. Your notes and recent videos are saved on this device.');
+            }
+
+            urlInput.value = '';
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            videoHistory.forEach(id => {
+                const li = document.createElement('li');
+                const button = document.createElement('button');
+                button.className = 'history-item';
+                button.type = 'button';
+                button.setAttribute('aria-label', `Replay YouTube video ${id}`);
+                const videoLabel = document.createElement('span');
+                videoLabel.textContent = `Video: ${id}`;
+                const replayLabel = document.createElement('span');
+                replayLabel.textContent = '▶ Replay';
+                button.append(videoLabel, replayLabel);
+                button.addEventListener('click', () => {
+                    playVideo(id);
+                });
+                li.appendChild(button);
+                historyList.appendChild(li);
+            });
+        }
+
+        let videoHistory = [];
+        const savedNotes = readStoredValue(notesStorageKey);
+        const savedHistory = readStoredValue(historyStorageKey);
+        if (savedNotes !== null) {
+            notesBox.value = savedNotes;
+        }
+        if (savedHistory !== null) {
+            try {
+                const parsedHistory = JSON.parse(savedHistory);
+                if (Array.isArray(parsedHistory)) {
+                    videoHistory = parsedHistory.filter(id => typeof id === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(id)).slice(0, 10);
+                }
+            } catch {
+                setStatus('Saved video history could not be read and has been cleared.');
+                saveStoredValue(historyStorageKey, '[]');
+            }
+        }
+        renderHistory();
+        if (!statusMessage.textContent) {
+            setStatus('Notes and recent videos are saved on this device.');
+        }
+
+        urlInput.addEventListener('paste', (e) => {
+            setTimeout(() => {
+                if (urlInput.value.trim()) playVideo(urlInput.value);
+            }, 50);
+        });
+
+        urlInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && urlInput.value.trim()) {
+                playVideo(urlInput.value);
+            }
+        });
+
+        loadBtn.addEventListener('click', () => {
+            if (urlInput.value.trim()) playVideo(urlInput.value);
+        });
+
+        notesBox.addEventListener('input', () => {
+            if (saveStoredValue(notesStorageKey, notesBox.value)) {
+                setStatus('Notes saved on this device.');
+            }
+        });
+
+        purgeSessionBtn.addEventListener('click', () => {
+            playerFrame.src = '';
+            playerFrame.style.display = 'none';
+            placeholder.style.display = 'flex';
+            notesBox.value = '';
+            urlInput.value = '';
+            videoHistory = [];
+            renderHistory();
+            let storageCleared = true;
+            for (const key of [notesStorageKey, historyStorageKey]) {
+                try {
+                    localStorage.removeItem(key);
+                } catch {
+                    storageCleared = false;
+                }
+            }
+            setStatus(storageCleared
+                ? 'Session, saved notes, and recent videos cleared.'
+                : 'The session was cleared, but saved data could not be removed from browser storage.');
+        });
+
+        exportNotesBtn.addEventListener('click', () => {
+            if (!notesBox.value.trim()) {
+                setStatus('Write some notes before exporting.');
+                return;
+            }
+            const blob = new Blob([notesBox.value], { type: 'text/plain;charset=utf-8' });
+            const link = document.createElement('a');
+            const downloadUrl = URL.createObjectURL(blob);
+            link.href = downloadUrl;
+            link.download = `video_notes_${new Date().toISOString().slice(0, 10)}.txt`;
+            link.click();
+            setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+            setStatus('Notes exported.');
+        });
+    </script>
+</body>
+</html>

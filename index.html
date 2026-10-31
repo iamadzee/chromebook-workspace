@@ -6,13 +6,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0b1020">
     <script src="./pwa.js" defer></script>
-    <title>Chromebook Tools</title>
+    <script src="./theme.js"></script>
+    <title>Chromebook Workspaces</title>
     <style>
         :root {
-            color-scheme: dark;
             font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #0b1020;
-            color: #f3f6ff;
+            --page-bg: #0b1020;
+            --page-glow: #1c2b54;
+            --text-main: #f3f6ff;
+            --text-muted: #aab5cd;
+            --accent: #93b4ff;
+            --card-bg: rgba(22, 32, 57, 0.88);
+            --card-hover: #1c2b4b;
+            --card-border: #293754;
+            --card-hover-border: #5279d9;
+            background: var(--page-bg);
+            color: var(--text-main);
+            color-scheme: dark;
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+            --page-bg: #f4f7ff;
+            --page-glow: #dce7ff;
+            --text-main: #17233c;
+            --text-muted: #53627d;
+            --accent: #315eb8;
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --card-hover: #e8efff;
+            --card-border: #d1dbef;
+            --card-hover-border: #7898df;
         }
 
         * { box-sizing: border-box; }
@@ -23,7 +46,7 @@
             padding: 48px 20px;
             display: grid;
             place-items: center;
-            background: radial-gradient(ellipse at 50% 0%, #1c2b54 0%, #0b1020 58%);
+            background: radial-gradient(ellipse at 50% 0%, var(--page-glow) 0%, var(--page-bg) 58%);
         }
 
         main {
@@ -31,9 +54,38 @@
             text-align: center;
         }
 
+        .hero-top {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 12px;
+        }
+
+        .theme-toggle {
+            padding: 9px 13px;
+            color: var(--text-main);
+            font: inherit;
+            font-size: 0.85rem;
+            font-weight: 650;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 160ms ease, border-color 160ms ease;
+        }
+
+        .theme-toggle:hover {
+            background: var(--card-hover);
+            border-color: var(--card-hover-border);
+        }
+
+        .theme-toggle:focus-visible {
+            outline: 3px solid var(--accent);
+            outline-offset: 3px;
+        }
+
         .eyebrow {
             margin: 0 0 16px;
-            color: #93b4ff;
+            color: var(--accent);
             font-size: 0.75rem;
             font-weight: 700;
             letter-spacing: 0.16em;
@@ -50,7 +102,7 @@
 
         .intro {
             margin: 18px 0 34px;
-            color: #aab5cd;
+            color: var(--text-muted);
             font-size: 1rem;
             line-height: 1.65;
         }
@@ -69,36 +121,36 @@
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            color: #f3f6ff;
+            color: var(--text-main);
             text-decoration: none;
-            background: rgba(22, 32, 57, 0.88);
-            border: 1px solid #293754;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
             border-radius: 14px;
             transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
         }
 
         .tool-link:hover {
             transform: translateY(-2px);
-            background: #1c2b4b;
-            border-color: #5279d9;
+            background: var(--card-hover);
+            border-color: var(--card-hover-border);
         }
 
         .tool-link:focus-visible {
-            outline: 3px solid #93b4ff;
+            outline: 3px solid var(--accent);
             outline-offset: 3px;
         }
 
         .tool-placeholder {
-            color: #aab5cd;
+            color: var(--text-muted);
             border-style: dashed;
-            background: rgba(22, 32, 57, 0.4);
+            background: color-mix(in srgb, var(--card-bg) 45%, transparent);
             cursor: default;
         }
 
         .tool-name { font-weight: 650; }
-        .arrow { color: #93b4ff; font-size: 1.2rem; }
+        .arrow { color: var(--accent); font-size: 1.2rem; }
         .placeholder-label {
-            color: #93b4ff;
+            color: var(--accent);
             font-size: 0.75rem;
             font-weight: 600;
         }
@@ -111,18 +163,23 @@
 </head>
 <body>
     <main>
-        <p class="eyebrow">A little more capable</p>
-        <h1>Small tools for your Chromebook</h1>
-        <p class="intro">Simple features to make life with a restricted device a little easier.</p>
-        <nav class="tools" aria-label="Available tools">
-            <a class="tool-link" href="runner.html"><span class="tool-name">Python Runner</span><span class="arrow" aria-hidden="true">→</span></a>
-            <a class="tool-link" href="editor.html"><span class="tool-name">Config & Hex Editor</span><span class="arrow" aria-hidden="true">→</span></a>
-            <a class="tool-link" href="screenrecorder.html"><span class="tool-name">Screen Recorder</span><span class="arrow" aria-hidden="true">→</span></a>
-            <a class="tool-link" href="flattener.html"><span class="tool-name">Picture Flattener</span><span class="arrow" aria-hidden="true">→</span></a>
-            <a class="tool-link" href="inspector.html"><span class="tool-name">Inspector</span><span class="arrow" aria-hidden="true">→</span></a>
-            <a class="tool-link" href="player.html"><span class="tool-name">Audio Studio & Player</span><span class="arrow" aria-hidden="true">→</span></a>
-            <div class="tool-link tool-placeholder" aria-label="Reserved for a future tool"><span class="placeholder-label">Coming soon</span></div>
-            <div class="tool-link tool-placeholder" aria-label="Reserved for a future tool"><span class="placeholder-label">Coming soon</span></div>
+        <div class="hero-top">
+            <button class="theme-toggle" id="themeToggle" type="button" aria-pressed="false">Switch to light theme</button>
+        </div>
+        <p class="eyebrow">More room to work</p>
+        <h1>Make more of your Chromebook</h1>
+        <p class="intro">Browser-based capabilities to help you work around software and workflow limits, while staying within ChromeOS's security boundaries.</p>
+        <nav class="tools" aria-label="Chromebook capabilities">
+            <a class="tool-link" href="runner.html"><span class="tool-name">Offline Python Runner</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="editor.html"><span class="tool-name">Config & Binary File Editor</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="screenrecorder.html"><span class="tool-name">Screen Recorder & Video Trimmer</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="flattener.html"><span class="tool-name">Offline Document OCR & Searchable PDF</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="inspector.html"><span class="tool-name">Markdown Text Editor</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="player.html"><span class="tool-name">Audio Player & Sound Booster</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="deck.html"><span class="tool-name">YouTube Study Deck</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="weblab.html"><span class="tool-name">Offline Web App Studio</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="vault.html"><span class="tool-name">Offline Encrypted File Vault</span><span class="arrow" aria-hidden="true">→</span></a>
+            <a class="tool-link" href="image-studio.html"><span class="tool-name">Offline Image Converter & Compressor</span><span class="arrow" aria-hidden="true">→</span></a>
         </nav>
     </main>
 </body>

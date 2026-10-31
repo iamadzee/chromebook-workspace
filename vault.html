@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b1020">
+    <script src="./theme.js"></script>
+    <meta name="description" content="Encrypt and unlock a portable file vault locally in your browser. No uploads, account, or subscription.">
+    <title>Offline File Vault</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; margin: 0; color: var(--text-main); background: radial-gradient(ellipse at 50% 0%, var(--page-glow) 0%, var(--bg-color) 58%); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+        header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px max(16px, calc((100vw - 1000px) / 2)); border-bottom: 1px solid var(--border-color); }
+        header h1 { margin: 0; font-size: clamp(1.15rem, 3vw, 1.5rem); text-align: center; }
+        main { width: min(100%, 1000px); margin: 0 auto; padding: 24px 20px; }
+        .back-link { color: var(--text-dim); text-decoration: none; }
+        .back-link:hover { color: var(--text-main); }
+        .intro, .muted { color: var(--text-dim); line-height: 1.55; }
+        .banner { margin: 18px 0; padding: 14px 16px; border-left: 4px solid var(--accent-blue); border-radius: 8px; background: var(--card-bg); color: var(--text-dim); line-height: 1.55; }
+        .banner strong { color: var(--text-main); }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+        .panel { min-width: 0; padding: 18px; border: 1px solid var(--border-color); border-radius: 16px; background: var(--panel-bg); box-shadow: 0 12px 32px #0003; }
+        .panel h2 { margin: 0 0 12px; font-size: 1.1rem; }
+        label { display: grid; gap: 6px; margin: 12px 0; color: var(--text-dim); font-size: .88rem; }
+        input, button { font: inherit; }
+        input[type="password"], input[type="file"] { width: 100%; padding: 10px 12px; color: var(--text-main); background: var(--term-bg); border: 1px solid var(--border-color); border-radius: 9px; }
+        input[type="file"] { padding: 8px; }
+        button { padding: 10px 14px; color: var(--text-main); background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 9px; cursor: pointer; font-weight: 650; }
+        button.primary { color: white; background: var(--accent-blue); }
+        button:hover:not(:disabled) { filter: brightness(1.1); }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #93b4ff; outline-offset: 3px; }
+        .status { min-height: 1.5em; color: var(--text-dim); overflow-wrap: anywhere; }
+        .error { color: #ff9a9a; }
+        .warning { color: #ffcc80; }
+        .file-list { display: grid; gap: 8px; margin: 12px 0; padding: 0; list-style: none; }
+        .file-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid var(--border-color); border-radius: 9px; overflow-wrap: anywhere; }
+        .download-link { color: var(--text-main); }
+        .howto { margin: 22px 0 0; padding-left: 20px; color: var(--text-dim); line-height: 1.7; }
+        .busy { cursor: progress; }
+        @media (max-width: 700px) { header { flex-wrap: wrap; justify-content: center; } header h1 { order: -1; width: 100%; } .grid { grid-template-columns: 1fr; } }
+    </style>
+    <link rel="stylesheet" href="./tool-theme.css">
+</head>
+<body>
+    <header>
+        <a class="back-link" href="index.html">← Back to capabilities</a>
+        <h1>Offline File Vault</h1>
+        <span aria-hidden="true"></span>
+    </header>
+    <main>
+        <p class="intro">Encrypt and carry private files in one password-protected bundle. Create or unlock it right here on your Chromebook—even without internet. No account, upload, storage subscription, or installation.</p>
+        <p class="banner"><strong>Your files and password stay in this browser.</strong> The vault is encrypted with AES-GCM using a key derived from your password. Choose a long, unique password and keep it safe: there is no password reset or recovery service.</p>
+        <div class="grid">
+            <section class="panel" aria-labelledby="createTitle">
+                <h2 id="createTitle">Create an encrypted vault</h2>
+                <form id="createForm">
+                    <label for="files">Files to protect<input id="files" type="file" multiple required></label>
+                    <label for="createPassword">Vault password (at least 12 characters)<input id="createPassword" type="password" minlength="12" autocomplete="new-password" required></label>
+                    <label for="confirmPassword">Confirm password<input id="confirmPassword" type="password" minlength="12" autocomplete="new-password" required></label>
+                    <button class="primary" type="submit" id="createButton">Encrypt and download vault</button>
+                </form>
+                <p class="muted">Names and file contents are encrypted. The bundle can be copied to a USB drive or backed up like any other file.</p>
+                <p class="status" id="createStatus" role="status" aria-live="polite"></p>
+            </section>
+            <section class="panel" aria-labelledby="openTitle">
+                <h2 id="openTitle">Unlock a vault</h2>
+                <form id="openForm">
+                    <label for="vaultFile">Encrypted vault file<input id="vaultFile" type="file" accept=".crvault,application/octet-stream" required></label>
+                    <label for="openPassword">Vault password<input id="openPassword" type="password" autocomplete="current-password" required></label>
+                    <button class="primary" type="submit" id="openButton">Unlock files</button>
+                </form>
+                <p class="status" id="openStatus" role="status" aria-live="polite"></p>
+                <ul class="file-list" id="unlockedFiles" aria-label="Unlocked files"></ul>
+            </section>
+        </div>
+        <ul class="howto">
+            <li>Works offline once this page has loaded; encryption and decryption happen on-device.</li>
+            <li>Keep a separate backup of your <code>.crvault</code> file. This tool does not store a copy.</li>
+            <li>Use a different, strong password. Anyone who gets both your vault and password can open it.</li>
+            <li>Large files use your device's memory while processing. For reliability, each file must be 64 MB or smaller and each vault may contain up to 100 files totaling 128 MB.</li>
+        </ul>
+    </main>
+    <script>
+        (() => {
+            const encoder = new TextEncoder();
+            const decoder = new TextDecoder('utf-8', { fatal: true });
+            const magic = encoder.encode('CRVAULT1');
+            const maxFiles = 100;
+            const maxFileBytes = 64 * 1024 * 1024;
+            const maxTotalBytes = 128 * 1024 * 1024;
+            const iterations = 310000;
+
+            function setStatus(id, message, kind = '') {
+                const element = document.getElementById(id);
+                element.textContent = message;
+                element.className = `status${kind ? ` ${kind}` : ''}`;
+            }
+
+            function setBusy(form, busy, buttonText) {
+                form.classList.toggle('busy', busy);
+                for (const control of form.querySelectorAll('input, button')) control.disabled = busy;
+                form.querySelector('button').textContent = buttonText;
+            }
+
+            async function deriveKey(password, salt) {
+                const material = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey']);
+                return crypto.subtle.deriveKey(
+                    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+                    material,
+                    { name: 'AES-GCM', length: 256 },
+                    false,
+                    ['encrypt', 'decrypt']
+                );
+            }
+
+            async function encryptRecord(key, bytes) {
+                const iv = crypto.getRandomValues(new Uint8Array(12));
+                const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+                const header = new Uint8Array(16);
+                header.set(iv);
+                new DataView(header.buffer).setUint32(12, ciphertext.byteLength);
+                return [header, ciphertext];
+            }
+
+            async function decryptRecord(key, bytes, offset) {
+                if (offset + 16 > bytes.byteLength) throw new Error('Vault is incomplete or damaged.');
+                const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                const iv = bytes.subarray(offset, offset + 12);
+                const size = view.getUint32(offset + 12);
+                const start = offset + 16;
+                const end = start + size;
+                if (size < 16 || end > bytes.byteLength) throw new Error('Vault is incomplete or damaged.');
+                try {
+                    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, bytes.subarray(start, end));
+                    return { plaintext: new Uint8Array(plaintext), nextOffset: end };
+                } catch {
+                    throw new Error('Could not unlock this vault. Check the password and make sure the file is intact.');
+                }
+            }
+
+            function validateFiles(files) {
+                if (!files.length) throw new Error('Choose at least one file.');
+                if (files.length > maxFiles) throw new Error(`Choose no more than ${maxFiles} files.`);
+                let total = 0;
+                for (const file of files) {
+                    if (file.size > maxFileBytes) throw new Error(`${file.name} is larger than 64 MB.`);
+                    total += file.size;
+                    if (total > maxTotalBytes) throw new Error('The selected files total more than 128 MB.');
+                }
+            }
+
+            document.getElementById('createForm').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const button = form.querySelector('button');
+                const originalText = button.textContent;
+                const files = [...document.getElementById('files').files];
+                const password = document.getElementById('createPassword').value;
+                if (password.length < 12) {
+                    setStatus('createStatus', 'Choose a password with at least 12 characters.', 'error');
+                    return;
+                }
+                if (password !== document.getElementById('confirmPassword').value) {
+                    setStatus('createStatus', 'The passwords do not match.', 'error');
+                    return;
+                }
+                try {
+                    validateFiles(files);
+                    setBusy(form, true, 'Encrypting…');
+                    setStatus('createStatus', 'Encrypting locally. Keep this page open until your vault downloads.');
+                    const salt = crypto.getRandomValues(new Uint8Array(16));
+                    const key = await deriveKey(password, salt);
+                    const metadata = encoder.encode(JSON.stringify(files.map(file => ({
+                        name: file.name,
+                        type: file.type,
+                        lastModified: file.lastModified,
+                        size: file.size
+                    }))));
+                    const records = [await encryptRecord(key, metadata)];
+                    for (const file of files) records.push(await encryptRecord(key, await file.arrayBuffer()));
+                    const count = new Uint8Array(4);
+                    new DataView(count.buffer).setUint32(0, records.length);
+                    const blob = new Blob([magic, salt, count, ...records.flat()], { type: 'application/octet-stream' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = 'private-files.crvault';
+                    link.click();
+                    setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+                    form.reset();
+                    setStatus('createStatus', `Encrypted ${files.length} file${files.length === 1 ? '' : 's'}. Store the downloaded .crvault bundle and remember your password.`);
+                } catch (error) {
+                    setStatus('createStatus', error.message || 'Encryption failed. No vault was created.', 'error');
+                } finally {
+                    setBusy(form, false, originalText);
+                }
+            });
+
+            document.getElementById('openForm').addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const button = form.querySelector('button');
+                const originalText = button.textContent;
+                const file = document.getElementById('vaultFile').files[0];
+                const password = document.getElementById('openPassword').value;
+                const output = document.getElementById('unlockedFiles');
+                output.replaceChildren();
+                try {
+                    if (!file) throw new Error('Choose a vault file.');
+                    if (file.size > maxTotalBytes + 1024 * 1024) throw new Error('Vault file is larger than the supported 129 MB maximum.');
+                    const bytes = new Uint8Array(await file.arrayBuffer());
+                    const headerLength = magic.length + 16 + 4;
+                    if (bytes.byteLength < headerLength || !magic.every((byte, index) => bytes[index] === byte)) {
+                        throw new Error('This is not a supported vault file.');
+                    }
+                    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+                    const recordCount = view.getUint32(magic.length + 16);
+                    if (recordCount < 2 || recordCount > maxFiles + 1) throw new Error('Vault has an invalid number of records.');
+                    setBusy(form, true, 'Unlocking…');
+                    setStatus('openStatus', 'Unlocking locally. Nothing is uploaded.');
+                    const salt = bytes.subarray(magic.length, magic.length + 16);
+                    const key = await deriveKey(password, salt);
+                    let offset = headerLength;
+                    const manifestRecord = await decryptRecord(key, bytes, offset);
+                    offset = manifestRecord.nextOffset;
+                    let manifest;
+                    try {
+                        manifest = JSON.parse(decoder.decode(manifestRecord.plaintext));
+                    } catch {
+                        throw new Error('The vault index is invalid or damaged.');
+                    }
+                    if (!Array.isArray(manifest) || manifest.length !== recordCount - 1 || manifest.length > maxFiles) {
+                        throw new Error('The vault index is invalid or damaged.');
+                    }
+                    const total = manifest.reduce((sum, entry) => {
+                        if (!entry || typeof entry.name !== 'string' || entry.name.length > 255 ||
+                            typeof entry.type !== 'string' || entry.type.length > 255 ||
+                            !Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > maxFileBytes) {
+                            throw new Error('The vault contains invalid file information.');
+                        }
+                        return sum + entry.size;
+                    }, 0);
+                    if (total > maxTotalBytes) throw new Error('Vault contents exceed the supported total size.');
+                    const downloads = [];
+                    for (const entry of manifest) {
+                        const record = await decryptRecord(key, bytes, offset);
+                        offset = record.nextOffset;
+                        if (record.plaintext.byteLength !== entry.size) throw new Error('A file in this vault is damaged.');
+                        downloads.push({ entry, bytes: record.plaintext });
+                    }
+                    if (offset !== bytes.byteLength) throw new Error('Vault contains unexpected or damaged data.');
+                    for (const { entry, bytes: content } of downloads) {
+                        const item = document.createElement('li');
+                        const name = document.createElement('span');
+                        name.textContent = `${entry.name} (${entry.size.toLocaleString()} bytes)`;
+                        const link = document.createElement('a');
+                        link.className = 'download-link';
+                        link.href = URL.createObjectURL(new Blob([content], { type: entry.type || 'application/octet-stream' }));
+                        link.download = entry.name;
+                        link.textContent = 'Download';
+                        link.addEventListener('click', () => setTimeout(() => URL.revokeObjectURL(link.href), 60000), { once: true });
+                        item.append(name, link);
+                        output.append(item);
+                    }
+                    setStatus('openStatus', `Unlocked ${downloads.length} file${downloads.length === 1 ? '' : 's'}. Select Download beside each file to save it.`);
+                    document.getElementById('openPassword').value = '';
+                } catch (error) {
+                    setStatus('openStatus', error.message || 'Could not unlock the vault.', 'error');
+                } finally {
+                    setBusy(form, false, originalText);
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
